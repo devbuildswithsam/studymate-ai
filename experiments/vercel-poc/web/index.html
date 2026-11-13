@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StudyMate AI - Vercel PoC</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0e1116; color: #e6edf3; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    button { background: #4fd1a5; color: #0e1116; border: 0; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    pre { background: #161b22; padding: 16px; border-radius: 8px; min-height: 220px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>StudyMate AI · Vercel PoC</h1>
+  <p>Health: <span id="health">checking…</span></p>
+  <button id="run">Run stream test</button>
+  <pre id="log"></pre>
+  <script>
+    const log = document.getElementById('log');
+    fetch('/api/health').then(r => r.json())
+      .then(d => document.getElementById('health').textContent = d.status)
+      .catch(() => document.getElementById('health').textContent = 'failed');
+
+    document.getElementById('run').onclick = () => {
+      log.textContent = '';
+      const start = performance.now();
+      const es = new EventSource('/api/stream-test');
+      es.onmessage = (e) => {
+        const seconds = ((performance.now() - start) / 1000).toFixed(2);
+        if (e.data === '[DONE]') { log.textContent += `done at ${seconds}s\n`; es.close(); return; }
+        log.textContent += `${seconds}s  ${e.data}\n`;
+      };
+      es.onerror = () => { log.textContent += 'error\n'; es.close(); };
+    };
+  </script>
+</body>
+</html>
