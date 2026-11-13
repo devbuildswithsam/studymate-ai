@@ -11,19 +11,24 @@ import argparse
 import sys
 import time
 
+from app.services.llm.registry import client_for, enabled_models, load_registry
 from openai import APIConnectionError, APIStatusError, RateLimitError
 
-from app.services.llm.registry import client_for, enabled_models, load_registry
-
-SYSTEM_PROMPT = "You are a concise study assistant for college students. Answer in at most 3 sentences."
+SYSTEM_PROMPT = (
+    "You are a concise study assistant for college students. Answer in at most 3 sentences."
+)
 
 
 def main() -> None:
     registry = load_registry()
     parser = argparse.ArgumentParser(description="Say hello to an LLM.")
     parser.add_argument("provider", choices=registry["providers"].keys())
-    parser.add_argument("--model", help="model id from models.yaml (default: first enabled for the provider)")
-    parser.add_argument("--question", default="Explain Newton's second law with one everyday example.")
+    parser.add_argument(
+        "--model", help="model id from models.yaml (default: first enabled for the provider)"
+    )
+    parser.add_argument(
+        "--question", default="Explain Newton's second law with one everyday example."
+    )
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--list-models", action="store_true")
     args = parser.parse_args()
@@ -39,17 +44,24 @@ def main() -> None:
         return
 
     model = args.model or next(
-        (m["id"] for m in enabled_models(registry) if m["provider"] == args.provider), None)
+        (m["id"] for m in enabled_models(registry) if m["provider"] == args.provider), None
+    )
     if not model:
         sys.exit(f"No enabled {args.provider} model in models.yaml")
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": args.question}]
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": args.question},
+    ]
     start = time.perf_counter()
     try:
         r = client.chat.completions.create(
-            model=model, messages=messages, temperature=args.temperature, max_tokens=1024)
+            model=model, messages=messages, temperature=args.temperature, max_tokens=1024
+        )
     except RateLimitError:
-        sys.exit("Rate limited (HTTP 429): free-tier limit reached. Wait or try the other provider.")
+        sys.exit(
+            "Rate limited (HTTP 429): free-tier limit reached. Wait or try the other provider."
+        )
     except APIConnectionError as e:
         sys.exit(f"Could not reach {args.provider}: {e}")
     except APIStatusError as e:

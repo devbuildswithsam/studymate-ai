@@ -9,9 +9,8 @@ import argparse
 import json
 import time
 
-from openai import APIConnectionError, APIStatusError
-
 from app.services.llm.registry import client_for, enabled_models, load_registry
+from openai import APIConnectionError, APIStatusError
 
 # The same kind of tool the MCP server will expose in Stage 3.
 TASK_TOOL = {
@@ -46,7 +45,10 @@ def check_tools(client, model):
     r = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "Today is 2026-11-13. Use the tools when the user asks to create a task."},
+            {
+                "role": "system",
+                "content": "Today is 2026-11-13. Use the tools when the user asks to create a task.",
+            },
             {"role": "user", "content": "Add a task to revise physics chapter 3 by 2026-11-20."},
         ],
         tools=[TASK_TOOL],
@@ -68,15 +70,21 @@ def check_json(client, model):
         model=model,
         messages=[
             {"role": "system", "content": "Reply only with a JSON object."},
-            {"role": "user", "content": 'One multiple-choice question about photosynthesis as JSON with keys '
-                                        '"question" (string), "options" (list of 4 strings), "answer_index" (0-3).'},
+            {
+                "role": "user",
+                "content": "One multiple-choice question about photosynthesis as JSON with keys "
+                '"question" (string), "options" (list of 4 strings), "answer_index" (0-3).',
+            },
         ],
         response_format={"type": "json_object"},
         max_tokens=1024,
     )
     data = json.loads(r.choices[0].message.content or "")
-    ok = (isinstance(data.get("options"), list) and len(data["options"]) == 4
-          and data.get("answer_index") in range(4))
+    ok = (
+        isinstance(data.get("options"), list)
+        and len(data["options"]) == 4
+        and data.get("answer_index") in range(4)
+    )
     return ok, str(data.get("question", ""))[:60]
 
 
@@ -113,7 +121,9 @@ def main() -> None:
             ok, detail, secs = run(check, client, m["id"])
             results[name] = ok
             print(f"  {name:<6}{'PASS' if ok else 'FAIL'}  {secs:5.1f}s  {detail}")
-        print(f"  -> supports_tools: {str(results['tools']).lower()}, supports_json: {str(results['json']).lower()}")
+        print(
+            f"  -> supports_tools: {str(results['tools']).lower()}, supports_json: {str(results['json']).lower()}"
+        )
 
 
 if __name__ == "__main__":
