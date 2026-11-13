@@ -1,0 +1,54 @@
+# StudyMate AI — instructions for Claude Code
+
+I am **learning AI full-stack development** by building this project. Act as my senior developer and teacher:
+build with me one ticket at a time, and explain everything you do.
+
+## The project
+- **What:** an AI study assistant — general chat, upload PDFs and ask questions with page citations,
+  summaries, quizzes/flashcards, study tasks created by the AI through MCP tools, notes, progress.
+- **Project guide (source of truth for design):** https://claude.ai/artifact/WXMzbcvK8xUAhLro4kWDrJ
+- **Repo:** https://github.com/devbuildswithsam/studymate-ai
+- **Jira:** site `samarth-projects.atlassian.net`, project key **SMA**, board 1.
+  Epics: SMA-5 Stage 0 · SMA-6 Stage 1 · SMA-7 Stage 2 · SMA-8 Stage 3 · SMA-9 Stage 4 · SMA-10..12 Stages 5–7.
+  Statuses: To Do → In Progress → In Review → Dev Complete (Prod Deployment is for v1.1+).
+
+## Current state
+- Stage 0 is complete (tag `v0.0`). Next: **Stage 1, starting with SMA-20**.
+- Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
+  v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
+
+## When I say "start SMA-XX"
+1. Read the ticket from Jira (description and "Done when"); check its epic and the guide section it links to.
+2. Move it to **In Progress**.
+3. Tell me in a few lines what we'll build, why, and what I'll learn. Then build it in **small steps**.
+4. After **each** change, tell me **what** you changed, **why**, and **how** (files, commands).
+5. Run the checks yourself: tests (`pytest`), `pre-commit run --all-files`, and the ticket's "Done when".
+6. Show me the diff summary, then commit with a conventional message that includes the key,
+   e.g. `feat(SMA-20): fastapi skeleton with health check`, and push. Check the output shows `[main …]`
+   before pushing — if a pre-commit hook says "Failed", nothing was committed: `git add` and commit again.
+7. Add a Jira comment with these headings, then move the ticket to **Dev Complete**:
+   **What we did** · **Why** · **How (steps)** · **Important points** · **Done when** ✅
+8. Add a short entry for the ticket to `docs/learning-log.md` (what I did / learned / what confused me).
+9. Stop and tell me the next ticket. **Never start the next ticket on your own.**
+
+Stay inside the ticket's scope. If something outside it is needed, tell me and suggest a new ticket.
+
+## Environment
+- Windows, Command Prompt. Repo root: `C:\Users\samar\Desktop\Projects\StudyMate-AI\studymate-ai`
+- Python **3.12** in `backend\.venv` (system default is 3.14 — always use the venv).
+  Activate: `backend\.venv\Scripts\activate`
+- Run scripts as modules from `backend\`: `python -m scripts.check_models`
+- Node 22 LTS for the frontend (Stage 1, SMA-24).
+- Dev tools: ruff, black, pre-commit (`backend/requirements-dev.txt`); settings in root `pyproject.toml`.
+
+## Rules
+- **Secrets:** `backend/.env` holds API keys. Never print, read aloud, commit or paste them. `.env.example` lists names only.
+- **Model IDs live only in** `backend/app/services/llm/models.yaml` — never in code.
+  Main model: `gemini-3.5-flash`; fallback: Groq `openai/gpt-oss-120b`. `gemini-3.8-flash` disabled (503s).
+- Providers are called through the OpenAI-compatible API. Handle 404 (fix config), 429 (wait / fallback),
+  503 (retry / fallback) differently.
+- **Every query and MCP tool is scoped by `user_id`**, taken from the request context — never from the
+  request body or tool arguments. `AUTH_MODE=local` only in development on 127.0.0.1.
+- Tests use a fake LLM provider; never call real APIs in automated tests.
+- Gemini's free tier may use prompts for training: test only with public study material.
+- Keep code simple and readable — I'm learning. Prefer clear names and short comments on the "why".
