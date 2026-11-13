@@ -9,8 +9,9 @@ import argparse
 import json
 import time
 
-from app.services.llm.registry import client_for, enabled_models, load_registry
 from openai import APIConnectionError, APIStatusError
+
+from app.services.llm.registry import client_for, enabled_models, load_registry
 
 # The same kind of tool the MCP server will expose in Stage 3.
 TASK_TOOL = {

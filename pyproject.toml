@@ -7,9 +7,15 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+src = ["backend"]  # so ruff knows `app` and `scripts` are our own packages
 
 [tool.ruff.lint]
 # E/W: style errors, F: real bugs (unused/undefined names), I: import order,
 # B: common bug patterns, UP: modern Python syntax
 select = ["E", "W", "F", "I", "B", "UP"]
 ignore = ["E501"]  # line length is black's job
+
+[tool.pytest.ini_options]
+# Lets `pytest` run from the repo root or from backend/ and still find `app`.
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]

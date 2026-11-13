@@ -11,8 +11,9 @@ import argparse
 import sys
 import time
 
-from app.services.llm.registry import client_for, enabled_models, load_registry
 from openai import APIConnectionError, APIStatusError, RateLimitError
+
+from app.services.llm.registry import client_for, enabled_models, load_registry
 
 SYSTEM_PROMPT = (
     "You are a concise study assistant for college students. Answer in at most 3 sentences."
