@@ -91,3 +91,25 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-20 — FastAPI skeleton: config, health check, CORS, pytest
+**Date:** 14 Nov 2026
+
+**What I did**
+- Built the backend base: `app/config.py` (settings from `.env`), `app/errors.py` (one error shape), `app/api/health.py` (`GET /api/health`) and `app/main.py` (app + CORS).
+- Wrote the first tests (`tests/conftest.py`, `tests/test_health.py`): 4 pass.
+- Ran `uvicorn app.main:app` and opened `/docs` (Swagger UI) and `/api/health`.
+
+**What I learned**
+- **ASGI:** uvicorn is the server, `app` is the application it calls for every request.
+- **pydantic-settings** checks `.env` at startup; `SecretStr` keeps keys from showing up in prints and logs.
+- **Routers** keep each feature in its own file; `main.py` just includes them.
+- **Dependency injection:** `Annotated[Settings, Depends(get_settings)]` lets a route ask for settings, and tests swap them with `app.dependency_overrides`.
+- **CORS** is enforced by the browser: the API names the one origin (`http://localhost:5173`) allowed to read its responses.
+- Exception handlers turn every error into `{"error": {"code", "message"}}`, and a 500 never shows internals.
+- ruff B008 flags `= Depends(...)` defaults; `Annotated` is the modern fix. Ruff's `src` setting tells it which imports are ours.
+
+**What confused me**
+- …
