@@ -1,0 +1,44 @@
+# Model registry: the ONLY place model IDs live (guide §7.5).
+version: 1
+
+providers:
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+
+models:
+  # MAIN: passed chat, tools and JSON on 13 Nov 2026
+  - id: gemini-3.5-flash
+    provider: gemini
+    display_name: Gemini 3.5 Flash
+    priority: 1
+    context_window: null      # fill later from the AI Studio model card
+    supports_tools: true
+    supports_json: true
+    default_for: [chat, study, quiz]
+    enabled: true
+
+  # FALLBACK: passed chat, tools and JSON, under 1 s
+  - id: openai/gpt-oss-120b
+    provider: groq
+    display_name: GPT-OSS 120B (Groq)
+    priority: 2
+    context_window: null      # fill later from the Groq console Models page
+    supports_tools: true
+    supports_json: true
+    default_for: []
+    enabled: true
+
+  # PAUSED: overloaded (HTTP 503) on 13 Nov 2026, so not tested yet
+  - id: gemini-3.8-flash
+    provider: gemini
+    display_name: Gemini 3.8 Flash
+    priority: 3
+    context_window: null
+    supports_tools: null      # unknown: it never answered
+    supports_json: null
+    default_for: []
+    enabled: false
