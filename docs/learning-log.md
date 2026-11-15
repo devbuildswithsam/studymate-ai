@@ -199,3 +199,27 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-24 — Frontend setup: React + Vite + TypeScript + Tailwind + shadcn/ui
+**Date:** 15 Nov 2026
+
+**What I did**
+- Created `frontend/` with Vite (React + TS), Tailwind v4, shadcn/ui, React Router, TanStack Query, ESLint + Prettier.
+- Added Vitest + Testing Library so the frontend is test-first too: 16 tests.
+- Built the app shell (sidebar + main) and `HealthStatus`, which reads `/api/health` through Vite's dev proxy.
+- Ran FastAPI and Vite together and confirmed `/api` requests on port 5173 reach FastAPI.
+
+**What I learned**
+- **Dev proxy:** React calls relative `/api/...` paths; Vite forwards them to 127.0.0.1:8000. One origin = no CORS, no backend URL in the code.
+- **shadcn/ui** copies component source into my repo (`src/components/ui/`) instead of installing a library.
+- **TanStack Query** handles loading / error / caching for API calls (`useHealth()`).
+- **Testing Library** queries by role (`navigation`, `link`, `main`, `status`) like a user or screen reader would; jsdom is a fake browser for tests.
+- `NavLink` adds `aria-current="page"` itself; `end` stops `/` from matching every page.
+- Fast refresh needs files that export only components.
+- Check `--help` before running unfamiliar CLIs; check unexpected packages before trusting them (`cn` was legitimate).
+- `npm audit --omit=dev` shows what ships to the browser; build-only tools belong in devDependencies.
+
+**What confused me**
+- …
