@@ -13,7 +13,7 @@ import time
 
 from openai import APIConnectionError, APIStatusError, RateLimitError
 
-from app.services.llm.registry import client_for, enabled_models, load_registry
+from app.services.llm.registry import client_for, load_registry
 
 SYSTEM_PROMPT = (
     "You are a concise study assistant for college students. Answer in at most 3 sentences."
@@ -23,7 +23,7 @@ SYSTEM_PROMPT = (
 def main() -> None:
     registry = load_registry()
     parser = argparse.ArgumentParser(description="Say hello to an LLM.")
-    parser.add_argument("provider", choices=registry["providers"].keys())
+    parser.add_argument("provider", choices=registry.providers.keys())
     parser.add_argument(
         "--model", help="model id from models.yaml (default: first enabled for the provider)"
     )
@@ -45,7 +45,7 @@ def main() -> None:
         return
 
     model = args.model or next(
-        (m["id"] for m in enabled_models(registry) if m["provider"] == args.provider), None
+        (m.id for m in registry.enabled_models() if m.provider == args.provider), None
     )
     if not model:
         sys.exit(f"No enabled {args.provider} model in models.yaml")

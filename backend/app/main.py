@@ -6,11 +6,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health
+from app.api import health, models
 from app.config import APP_VERSION, get_settings
 from app.errors import register_error_handlers
+from app.services.llm.registry import get_registry
 
 settings = get_settings()
+get_registry()  # validate models.yaml now: a mistake stops startup with a clear error
 
 app = FastAPI(title="StudyMate AI", version=APP_VERSION)
 
@@ -26,3 +28,4 @@ app.add_middleware(
 register_error_handlers(app)
 
 app.include_router(health.router)
+app.include_router(models.router)

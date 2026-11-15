@@ -32,3 +32,11 @@ class ProviderTimeoutError(LLMError):
 
 class LLMConfigError(LLMError):
     """HTTP 401/403/404: wrong API key or model id. Retrying won't help; fix the config."""
+
+
+class AllModelsFailedError(LLMError):
+    """Every model that could answer the request failed (SMA-22). The message lists why."""
+
+    def __init__(self, message: str, reasons: list[str]):
+        super().__init__(message, provider="fallback")
+        self.reasons = reasons

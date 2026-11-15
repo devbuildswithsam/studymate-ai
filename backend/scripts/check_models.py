@@ -11,7 +11,7 @@ import time
 
 from openai import APIConnectionError, APIStatusError
 
-from app.services.llm.registry import client_for, enabled_models, load_registry
+from app.services.llm.registry import client_for, load_registry
 
 # The same kind of tool the MCP server will expose in Stage 3.
 TASK_TOOL = {
@@ -108,18 +108,18 @@ def main() -> None:
     args = parser.parse_args()
 
     registry = load_registry()
-    for m in enabled_models(registry):
-        if args.only and m["id"] != args.only:
+    for m in registry.enabled_models():
+        if args.only and m.id != args.only:
             continue
-        print(f"\n{m['id']}  ({m['provider']})")
+        print(f"\n{m.id}  ({m.provider})")
         try:
-            client = client_for(registry, m["provider"])
+            client = client_for(registry, m.provider)
         except RuntimeError as e:
             print(f"  skipped: {e}")
             continue
         results = {}
         for name, check in (("chat", check_chat), ("tools", check_tools), ("json", check_json)):
-            ok, detail, secs = run(check, client, m["id"])
+            ok, detail, secs = run(check, client, m.id)
             results[name] = ok
             print(f"  {name:<6}{'PASS' if ok else 'FAIL'}  {secs:5.1f}s  {detail}")
         print(
