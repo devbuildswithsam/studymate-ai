@@ -156,3 +156,22 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-53 — ADRs for early decisions and README setup instructions
+**Date:** 15 Nov 2026
+
+**What I did**
+- Started `docs/adr/` with an index, a template and five ADRs (model registry, adapters, no SDK retries, capability-aware fallback, `httpx2`).
+- Rewrote the README: status, setup, `.env` settings, running the API, tests, hooks, scripts, project structure.
+- Tested the README by following it on a fresh clone from GitHub: tests passed and the server ran, with no API keys.
+
+**What I learned**
+- An **ADR** records one decision: Context → Decision → Consequences (+ alternatives). Code shows *what*; ADRs keep *why*.
+- ADRs are never rewritten; a changed decision gets a new ADR that supersedes the old one.
+- Setup docs must be tested like code: follow them on a clean machine/clone, exactly as written.
+- Docs should only state what's verified (we marked the Gemini `retryDelay` quirk as "not yet seen live").
+
+**What confused me**
+- …
