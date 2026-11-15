@@ -175,3 +175,27 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-23 — POST /api/chat with in-memory conversation history
+**Date:** 15 Nov 2026
+
+**What I did**
+- Built `POST /api/chat` **test-first**: 5 red → green rounds and one refactor.
+- Added `ConversationStore` (memory per user), `get_current_user_id()` ("local" for now) and the chat limits.
+- Filled the SMA-22 gap with factory tests.
+- First real conversation through the whole app: Gemini remembered turn 1 when answering turn 2.
+
+**What I learned**
+- **Test-first:** write the test, watch it fail for the *right* reason (404, missing module, wrong behaviour), then write only enough code to pass. A test that already passes is fine when it guards a boundary (exactly 4000 chars).
+- The model has **no memory**: every call re-sends the conversation (`tokens_in` went 43 → 84 on turn 2).
+- **Context window / trimming:** send only the last 10 messages; the store keeps everything.
+- `StringConstraints` rejects bad input (too long, empty) with 422 before my code runs.
+- Scope by `user_id` from the request context; another user's conversation looks exactly like a missing one (404).
+- Save a turn only after the AI answers, so failures leave nothing half-done.
+- **Tests can be wrong too:** a fake replaced after the manager cached it did nothing, and a helper turned `""` into `None`. Mutation checks and suspicious passes catch this.
+- **Characterisation tests** pin down existing code before changing it.
+
+**What confused me**
+- …
