@@ -22,9 +22,11 @@ class FakeProvider(LLMProvider):
         self.replies = list(replies or ["This is a fake answer."])
         self.error = error  # if set, every chat() call raises it
         self.calls: list[list[Message]] = []  # what we were asked, so tests can check it
+        self.options: list[ChatOptions] = []  # the options of each call (max_tokens, ...)
 
     def chat(self, messages: list[Message], options: ChatOptions | None = None) -> ChatResponse:
         self.calls.append(messages)
+        self.options.append(options or ChatOptions())
         if self.error:
             raise self.error
         # Replies are used in order; the last one repeats once the list runs out.

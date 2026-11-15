@@ -5,8 +5,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 
 > **Status:** v1.0 MVP in progress — Stage 1 (basic AI chatbot). Built in public.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
-> provider layer (Gemini + Groq adapters, model registry, automatic fallback) and
-> `GET /api/models`. Next: `POST /api/chat`, then the React frontend.
+> provider layer (Gemini + Groq adapters, model registry, automatic fallback),
+> `GET /api/models` and `POST /api/chat` (in-memory history). Next: the React frontend.
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -69,6 +69,9 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Interactive API docs: <http://127.0.0.1:8000/docs>
 - `GET /api/health` — status, version, env and auth mode
 - `GET /api/models` — enabled models and their status (`available`, `rate_limited`, `no_key`)
+- `POST /api/chat` — send `{"message": "..."}` (plus `conversation_id` to continue a
+  conversation, optionally `model`). Returns the reply, which model answered, whether a
+  fallback was used, and token counts. History is in memory: a restart forgets it.
 
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` trusts every request.
 `--reload` restarts the server when you save a file.
@@ -113,9 +116,10 @@ backend/
     main.py            FastAPI app: CORS, error handlers, routers
     config.py          settings from backend/.env (pydantic-settings)
     errors.py          one error format: {"error": {"code", "message"}}
-    api/               routers: health.py, models.py
+    api/               routers: health.py, models.py, chat.py (+ deps.py: current user)
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
+    services/chat_history.py  in-memory conversations, per user
   scripts/             dev scripts that call real APIs
   tests/               pytest tests (no real API calls)
 frontend/              React app (from SMA-24)

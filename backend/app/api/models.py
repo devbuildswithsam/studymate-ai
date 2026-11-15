@@ -55,5 +55,4 @@ def list_models(
                 status=status,
             )
         )
-    default = next((m.id for m in registry.enabled_models() if "chat" in m.default_for), None)
-    return ModelsResponse(default_model=default, models=models)
+    return ModelsResponse(default_model=registry.default_model("chat"), models=models)

@@ -69,6 +69,10 @@ class ModelRegistry(BaseModel):
         """Enabled models, in the order they should be tried."""
         return sorted((m for m in self.models if m.enabled), key=lambda m: m.priority)
 
+    def default_model(self, purpose: Literal["chat", "study", "quiz"]) -> str | None:
+        """The enabled model marked `default_for: [<purpose>]`, if any."""
+        return next((m.id for m in self.enabled_models() if purpose in m.default_for), None)
+
     def get(self, model_id: str) -> ModelConfig:
         for m in self.models:
             if m.id == model_id:
