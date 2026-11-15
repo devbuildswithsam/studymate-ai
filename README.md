@@ -7,8 +7,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
 > provider layer (Gemini + Groq adapters, model registry, automatic fallback),
 > `GET /api/models`, `POST /api/chat` (in-memory history), the frontend shell and the
-> **chat page** (Markdown + maths answers, copy button, friendly error toasts).
-> Next: model selector and response badges.
+> **chat page** (Markdown + maths answers, copy button, friendly error toasts, model
+> selector with a "Use fallback" toggle, and badges showing which model answered).
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -78,7 +78,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `GET /api/health` — status, version, env and auth mode
 - `GET /api/models` — enabled models and their status (`available`, `rate_limited`, `no_key`)
 - `POST /api/chat` — send `{"message": "..."}` (plus `conversation_id` to continue a
-  conversation, optionally `model`). Returns the reply, which model answered, whether a
+  conversation, optionally `model` and `allow_fallback`, default `true`). Returns the reply, which model answered, whether a
   fallback was used, and token counts. History is in memory: a restart forgets it.
 
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` trusts every request.

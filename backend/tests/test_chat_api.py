@@ -238,3 +238,27 @@ def test_all_models_failing_returns_503_and_saves_nothing(chat_client, fakes):
     sent = [m["content"] for m in fakes["main"].calls[-1]]
     assert "lost question" not in sent  # the failed turn was not saved
     assert "first question" in sent
+
+
+# --- "Use fallback if the model fails" (SMA-26) -------------------------------------
+
+
+def test_with_fallback_off_a_failing_model_returns_503_and_the_backup_is_not_used(
+    chat_client, fakes
+):
+    fakes["main"].error = RateLimitedError("429", "gemini")
+
+    response = chat_client.post("/api/chat", json={"message": "hi", "allow_fallback": False})
+
+    assert response.status_code == 503
+    assert "main: rate-limited" in response.json()["error"]["message"]
+    assert fakes["backup"].calls == []
+
+
+def test_fallback_is_on_by_default(chat_client, fakes):
+    fakes["main"].error = RateLimitedError("429", "gemini")
+
+    body = chat_client.post("/api/chat", json={"message": "hi"}).json()
+
+    assert body["reply"] == "answer from backup"
+    assert body["fallback_used"] is True

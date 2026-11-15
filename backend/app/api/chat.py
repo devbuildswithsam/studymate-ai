@@ -41,6 +41,7 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None  # None = start a new conversation
     model: str | None = None  # a model id from models.yaml; None = the chat default
     provider: str | None = None  # optional cross-check: must match the model's provider
+    allow_fallback: bool = True  # False: only the chosen model may answer (SMA-26)
 
 
 class ChatReply(BaseModel):
@@ -78,7 +79,12 @@ def chat(
     # The model has no memory of its own: every call sends the conversation so far.
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history, question]
     try:
-        result = manager.chat(messages, ChatOptions(max_tokens=MAX_OUTPUT_TOKENS), model_id)
+        result = manager.chat(
+            messages,
+            ChatOptions(max_tokens=MAX_OUTPUT_TOKENS),
+            model_id,
+            allow_fallback=request.allow_fallback,
+        )
     except AllModelsFailedError as e:
         raise HTTPException(503, f"The AI is unavailable right now ({e})") from e
     except LLMConfigError as e:  # e.g. the chosen model is disabled

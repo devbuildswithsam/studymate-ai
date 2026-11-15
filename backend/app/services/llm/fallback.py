@@ -101,8 +101,11 @@ class FallbackManager:
         options: ChatOptions | None = None,
         model_id: str | None = None,
         needs: Iterable[Capability] = (),
+        allow_fallback: bool = True,  # False: try only the chosen model (SMA-26 toggle)
     ) -> ChatResult:
         candidates = self.candidates(model_id, needs)
+        if not allow_fallback:
+            candidates = candidates[:1]
         if not candidates:
             raise AllModelsFailedError(
                 f"no enabled model supports {', '.join(sorted(set(needs)))}", reasons=[]

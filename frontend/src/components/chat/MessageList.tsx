@@ -1,6 +1,7 @@
 // The conversation: user bubbles on the right, AI answers on the left. SMA-25.
 import { CopyButton } from '@/components/chat/CopyButton'
 import { Markdown } from '@/components/chat/Markdown'
+import { MessageBadges } from '@/components/chat/MessageBadges'
 import type { ChatMessage } from '@/components/chat/types'
 import { cn } from '@/lib/utils'
 
@@ -32,7 +33,8 @@ export function MessageList({ messages, isThinking = false }: Props) {
                 ) : (
                   <>
                     <Markdown>{message.content}</Markdown>
-                    <div className="mt-1 flex justify-end">
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      {message.meta ? <MessageBadges meta={message.meta} /> : <span />}
                       <CopyButton text={message.content} />
                     </div>
                   </>

@@ -49,7 +49,7 @@ describe('Chat page', () => {
     expect(within(messages()).getByText('What is osmosis?')).toBeInTheDocument() // shown at once
     expect(screen.getByText('StudyMate is thinking…')).toBeInTheDocument()
     expect(input()).toHaveValue('')
-    expect(chatBodies(fetch)).toEqual([{ message: 'What is osmosis?' }])
+    expect(chatBodies(fetch)).toEqual([{ message: 'What is osmosis?', allow_fallback: true }])
 
     answer(Response.json(reply('Water moves **through** a membrane.').body))
 
@@ -66,7 +66,11 @@ describe('Chat page', () => {
     await userEvent.type(input(), 'Second{Enter}')
     await waitFor(() => expect(chatBodies(fetch)).toHaveLength(2))
 
-    expect(chatBodies(fetch)[1]).toEqual({ message: 'Second', conversation_id: 'conv-42' })
+    expect(chatBodies(fetch)[1]).toEqual({
+      message: 'Second',
+      conversation_id: 'conv-42',
+      allow_fallback: true,
+    })
   })
 
   it('sends with Enter, and Shift+Enter adds a new line instead', async () => {
@@ -78,7 +82,7 @@ describe('Chat page', () => {
     expect(input()).toHaveValue('Line one\nLine two')
 
     await userEvent.type(input(), '{Enter}')
-    expect(chatBodies(fetch)).toEqual([{ message: 'Line one\nLine two' }])
+    expect(chatBodies(fetch)).toEqual([{ message: 'Line one\nLine two', allow_fallback: true }])
   })
 
   it('cannot send an empty message', async () => {
@@ -167,5 +171,116 @@ describe('Chat page when the backend is down behind the dev proxy', () => {
     await userEvent.type(input(), 'Hello{Enter}')
 
     expect(await screen.findByText(/Can't reach the server/)).toBeInTheDocument()
+  })
+})
+
+describe('Chat page model selector and badges (SMA-26)', () => {
+  const MODELS = {
+    body: {
+      default_model: 'gemini-3.5-flash',
+      models: [
+        {
+          id: 'gemini-3.5-flash',
+          provider: 'gemini',
+          display_name: 'Gemini 3.5 Flash',
+          supports_tools: true,
+          supports_json: true,
+          status: 'available',
+        },
+        {
+          id: 'openai/gpt-oss-120b',
+          provider: 'groq',
+          display_name: 'GPT-OSS 120B (Groq)',
+          supports_tools: true,
+          supports_json: true,
+          status: 'available',
+        },
+      ],
+    },
+  }
+  const modelSelect = () => screen.getByRole('combobox', { name: 'Model' })
+
+  it('starts on the default model and sends it, with fallback on', async () => {
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      '/api/chat': reply('Hi'),
+    })
+    renderApp('/')
+
+    expect(await screen.findByRole('combobox', { name: 'Model' })).toHaveValue('gemini-3.5-flash')
+    await userEvent.type(input(), 'Hello{Enter}')
+
+    expect(chatBodies(fetch)).toEqual([
+      { message: 'Hello', model: 'gemini-3.5-flash', allow_fallback: true },
+    ])
+  })
+
+  it('asks the newly chosen model after switching', async () => {
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      '/api/chat': reply('Hi'),
+    })
+    renderApp('/')
+
+    await userEvent.selectOptions(
+      await screen.findByRole('combobox', { name: 'Model' }),
+      'openai/gpt-oss-120b',
+    )
+    await userEvent.type(input(), 'Hello{Enter}')
+
+    expect(chatBodies(fetch)[0].model).toBe('openai/gpt-oss-120b')
+  })
+
+  it('sends allow_fallback false when the toggle is off', async () => {
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      '/api/chat': reply('Hi'),
+    })
+    renderApp('/')
+
+    await screen.findByRole('combobox', { name: 'Model' })
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Use fallback if the model fails' }))
+    await userEvent.type(input(), 'Hello{Enter}')
+
+    expect(chatBodies(fetch)[0].allow_fallback).toBe(false)
+  })
+
+  it('labels each answer with the model that actually answered, and a fallback warning', async () => {
+    const fallbackReply = {
+      body: {
+        ...reply('From the backup.').body,
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        fallback_used: true,
+        fallback_reason: 'gemini-3.5-flash: rate-limited',
+      },
+    }
+    mockApi({ '/api/health': HEALTH, '/api/models': MODELS, '/api/chat': fallbackReply })
+    renderApp('/')
+
+    await screen.findByRole('combobox', { name: 'Model' })
+    await userEvent.type(input(), 'Hello{Enter}')
+
+    const answer = (await within(messages()).findByText('From the backup.')).closest('li')!
+    expect(within(answer).getByText('General AI')).toBeInTheDocument()
+    expect(within(answer).getByText('GPT-OSS 120B (Groq)')).toBeInTheDocument() // display name
+    expect(
+      within(answer).getByLabelText('Fallback used: gemini-3.5-flash: rate-limited'),
+    ).toBeInTheDocument()
+    expect(modelSelect()).toHaveValue('gemini-3.5-flash') // the choice itself doesn't change
+  })
+
+  it('still chats when the model list cannot be loaded (backend default model)', async () => {
+    const fetch = mockApi({ '/api/health': HEALTH, '/api/chat': reply('Hi') }) // /api/models -> 404
+    renderApp('/')
+
+    await userEvent.type(input(), 'Hello{Enter}')
+
+    expect(await within(messages()).findByText('Hi')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull()
+    expect(chatBodies(fetch)[0]).toEqual({ message: 'Hello', allow_fallback: true })
   })
 })

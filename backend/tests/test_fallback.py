@@ -256,3 +256,25 @@ def test_providers_are_built_once_and_reused():
     manager.chat(MESSAGES)
 
     assert built == ["primary"]
+
+
+# --- Fallback can be switched off (SMA-26: "Use fallback if the model fails") -------
+
+
+def test_without_fallback_only_the_chosen_model_is_tried():
+    manager, providers, _ = make_manager(primary=rate_limited())
+
+    with pytest.raises(AllModelsFailedError) as caught:
+        manager.chat(MESSAGES, allow_fallback=False)
+
+    assert caught.value.reasons == ["primary: rate-limited"]
+    assert providers["no-tools"].calls == [] and providers["backup"].calls == []
+
+
+def test_without_fallback_a_working_model_still_answers():
+    manager, _, _ = make_manager()
+
+    result = manager.chat(MESSAGES, model_id="backup", allow_fallback=False)
+
+    assert result.response.text == "answer from backup"
+    assert result.fallback_used is False

@@ -89,3 +89,45 @@ describe('MessageList', () => {
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 })
+
+describe('MessageList badges (SMA-26)', () => {
+  const answered = (meta: ChatMessage['meta']): ChatMessage => ({
+    id: 'a1',
+    role: 'assistant',
+    content: 'An answer.',
+    meta,
+  })
+
+  it('shows "General AI" and the model on every answer', () => {
+    render(
+      <MessageList
+        messages={[answered({ modelName: 'Gemini 3.5 Flash', fallbackReason: null })]}
+      />,
+    )
+
+    const answer = screen.getAllByRole('listitem')[0]
+    expect(within(answer).getByText('General AI')).toBeInTheDocument()
+    expect(within(answer).getByText('Gemini 3.5 Flash')).toBeInTheDocument()
+    expect(screen.queryByText('fallback')).toBeNull()
+  })
+
+  it('shows a fallback warning with the reason on hover and for screen readers', () => {
+    const reason = 'gemini-3.5-flash: rate-limited'
+    render(
+      <MessageList
+        messages={[answered({ modelName: 'GPT-OSS 120B (Groq)', fallbackReason: reason })]}
+      />,
+    )
+
+    const warning = screen.getByLabelText(`Fallback used: ${reason}`)
+    expect(warning).toHaveTextContent('fallback')
+    expect(warning).toHaveAttribute('title', reason) // the hover text
+    expect(screen.getByText('GPT-OSS 120B (Groq)')).toBeInTheDocument()
+  })
+
+  it('shows no badges on your own messages', () => {
+    render(<MessageList messages={[user('Hi')]} />)
+
+    expect(screen.queryByText('General AI')).toBeNull()
+  })
+})

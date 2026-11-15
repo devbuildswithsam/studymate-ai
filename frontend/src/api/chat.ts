@@ -8,6 +8,7 @@ export type ChatRequest = {
   message: string
   conversation_id?: string // leave out to start a new conversation
   model?: string
+  allow_fallback?: boolean // SMA-26: false = only the chosen model may answer
 }
 
 /** Same fields as the backend's ChatReply. */
