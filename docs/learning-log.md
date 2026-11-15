@@ -134,3 +134,25 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-22 — Model registry loader, FallbackManager and GET /api/models
+**Date:** 15 Nov 2026
+
+**What I did**
+- Validated `models.yaml` with Pydantic (`registry.py`); the app now refuses to start if it's wrong.
+- Added `factory.py` (model → ready adapter), `fallback.py` (`FallbackManager`) and `GET /api/models`.
+- 30 new tests using `FakeProvider`s and a `FakeClock`; 73 in total.
+
+**What I learned**
+- `extra="forbid"` turns a typo like `priorty:` into a clear error instead of a silently ignored field.
+- A `model_validator` checks rules across fields (unknown provider, duplicate ids, shared priorities).
+- **Factory pattern:** say *which model*, get a ready object without knowing its class, key or URL.
+- **Fallback by capability:** a tools request only falls back to models with `supports_tools: true`; failing is better than a broken answer.
+- Every answer carries a label (`fallback_used`, `fallback_reason`) so the UI can be honest about it.
+- Remembering 429s with a cool-down; injecting the clock makes "60 seconds later" instant in tests.
+- **Mutation check:** break the code on purpose and confirm the test fails, so the test really guards the rule.
+
+**What confused me**
+- …
