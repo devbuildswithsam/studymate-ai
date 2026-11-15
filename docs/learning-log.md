@@ -223,3 +223,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-25 — General chat page: message list, input, loading, Markdown, errors
+**Date:** 15 Nov 2026
+
+**What I did**
+- Built the chat page test-first: bubbles, input (Enter / Shift+Enter), thinking indicator, Markdown + maths answers, Copy button, friendly error toasts. 24 new frontend tests (40 total).
+- Checked the real system: a Gemini answer through the Vite proxy, and what the proxy does when the backend is stopped.
+
+**What I learned**
+- **XSS:** AI output is untrusted. react-markdown escapes raw HTML by default; `skipHtml` drops it too; never add `rehype-raw`. The mutation check showed which change the test really guards.
+- **Optimistic UI:** show the question at once; on error remove it, give the text back, show a toast.
+- `useMutation` (send/change) vs `useQuery` (read).
+- **Check reality, not assumptions:** a dead backend behind Vite's proxy gives an empty **HTTP 502**, not a failed fetch; my first error mapping was wrong.
+- **Tests can leak:** Sonner keeps toasts in module memory, so a toast from one test made another pass falsely. Run suspicious passes alone; reset library state after each test.
+- jsdom lacks some browser APIs (`matchMedia`): add small stand-ins in the test setup.
+- `npm ls <pkg>` finds duplicate versions; npm `overrides` forces one version (KaTeX 0.16 → 0.19).
+
+**What confused me**
+- …
