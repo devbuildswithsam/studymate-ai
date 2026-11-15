@@ -6,8 +6,9 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > **Status:** v1.0 MVP in progress — Stage 1 (basic AI chatbot). Built in public.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
 > provider layer (Gemini + Groq adapters, model registry, automatic fallback),
-> `GET /api/models`, `POST /api/chat` (in-memory history) and the frontend shell (React +
-> Vite, sidebar layout, API health indicator). Next: the chat UI.
+> `GET /api/models`, `POST /api/chat` (in-memory history), the frontend shell and the
+> **chat page** (Markdown + maths answers, copy button, friendly error toasts).
+> Next: model selector and response badges.
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -94,7 +95,9 @@ cd frontend
 npm run dev
 ```
 
-Open <http://localhost:5173>. The sidebar shows **API online** when the backend answers.
+Open <http://localhost:5173> and chat on the **Chat** page (Enter sends, Shift+Enter adds a
+new line). The sidebar shows **API online** when the backend answers; if it's stopped, sending
+shows a "Can't reach the server" toast. Chats are kept in memory: restarting the API forgets them.
 React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
 `http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
 
@@ -154,8 +157,10 @@ frontend/
   src/
     App.tsx            routes: every page renders inside the AppShell
     api/               client.ts (fetch + our error format), one file per endpoint
-    components/        layout/ (AppShell, nav), HealthStatus, ui/ (shadcn/ui, generated)
-    pages/             one component per page (placeholders for now)
+    components/        chat/ (MessageList, Markdown, ChatInput, CopyButton), layout/,
+                       HealthStatus, ui/ (shadcn/ui, generated)
+    lib/               errors.ts (friendly error messages), utils.ts
+    pages/             one component per page (ChatPage; the rest are placeholders)
     test/              Vitest setup and render helpers
   vite.config.ts       plugins, @ alias, /api dev proxy, Vitest settings
 docs/

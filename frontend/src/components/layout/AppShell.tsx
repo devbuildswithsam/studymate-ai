@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router'
 
 import { HealthStatus } from '@/components/HealthStatus'
 import { NAV_ITEMS } from '@/components/layout/nav'
+import { Toaster } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
 
 export function AppShell() {
@@ -34,6 +35,7 @@ export function AppShell() {
       <main className="flex-1 p-8">
         <Outlet /> {/* the current page renders here */}
       </main>
+      <Toaster richColors position="top-center" /> {/* toast.error(...) from any page */}
     </div>
   )
 }

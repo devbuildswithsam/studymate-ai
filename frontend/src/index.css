@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
+@plugin '@tailwindcss/typography'; /* "prose" class: styles rendered Markdown (SMA-25) */
 
 @custom-variant dark (&:is(.dark *));
 
