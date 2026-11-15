@@ -244,3 +244,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-26 — Model selector and response badges (model, General, fallback)
+**Date:** 15 Nov 2026
+
+**What I did**
+- Backend: `allow_fallback` on `POST /api/chat` (test-first).
+- Frontend: `ModelSelector` (model dropdown with status + "Use fallback" checkbox) and `MessageBadges` ("General AI", model name, ⚠ fallback with the reason), wired into the chat page. 16 new tests (101 backend, 52 frontend).
+- Real check: switching between Gemini and Groq changes who answers; with a deliberately broken Gemini key (set only in that process's environment), Groq answered with the fallback label, and with fallback off the API returned 503.
+
+**What I learned**
+- A UI toggle can need a backend change first: the API always fell back until `allow_fallback` existed.
+- Native `<select>` / checkbox are accessible by default and easy to test.
+- Hover text (`title`) alone isn't accessible: add the same text as `aria-label`.
+- Show the model that **actually** answered, not the one selected; a mutation check proved the test guards this.
+- Derive values (`chosen ?? default`) instead of copying them into state with an effect.
+- Environment variables override `.env` in pydantic-settings: a safe way to simulate a broken key without touching secrets.
+- Real APIs surprise you: Gemini rejects a bad key with HTTP 400, not 401/403.
+- `curl -s` treats a 502 as success; use `curl -f` when waiting for a server.
+
+**What confused me**
+- …
