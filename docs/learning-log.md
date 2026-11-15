@@ -267,3 +267,21 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-54 — Map Gemini's HTTP 400 "invalid API key" to LLMConfigError
+**Date:** 15 Nov 2026
+
+**What I did**
+- Follow-up from SMA-26: the Gemini adapter now treats a 400 that mentions the API key (or `API_KEY_INVALID`) as a configuration error; every other 400 stays an ordinary error.
+- 4 new tests (105 backend). Live check with a deliberately wrong key: the reason now says "configuration error" and the log line is the loud error one.
+
+**What I learned**
+- Capture the real error before writing the test: Gemini's body was `"Please pass a valid API key"` with the generic `INVALID_ARGUMENT`, not the `API_KEY_INVALID` I had guessed in the ticket.
+- Put provider quirks in that provider's adapter (override one method); the shared code and the FallbackManager didn't change.
+- A "guard" test that already passes before the fix is useful: it stops the fix from becoming too broad (a mutation that made every 400 a config error was caught).
+- When a test fails, check the test too: my expected fallback model was wrong, not the code.
+
+**What confused me**
+- …
