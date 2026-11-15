@@ -113,3 +113,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-21 — LLMProvider interface with Gemini and Groq adapters
+**Date:** 15 Nov 2026
+
+**What I did**
+- Built `app/services/llm/`: `exceptions.py` (typed errors), `base.py` (the `LLMProvider` interface), `openai_compat.py` (shared adapter), `gemini.py`, `groq.py` and `fake.py`.
+- Wrote 39 tests that fake the provider's server with `httpx2.MockTransport`: no real API calls.
+
+**What I learned**
+- **Interface (abstract base class):** `LLMProvider` declares `chat()`; Python refuses to create a provider that forgets it.
+- **Adapter pattern:** shared code in one parent class; each provider overrides only what differs (Gemini reads its 429 wait time from the body).
+- **Typed errors** say *what happened*, not who said it: 429 → `RateLimitedError`, 5xx → `ProviderUnavailableError`, 401/403/404 → `LLMConfigError` (fix config, don't retry).
+- **Mocking HTTP:** pass a fake `http_client` to the `openai` SDK and check both what we sent and what we got back.
+- `@pytest.mark.parametrize` runs one test for many inputs (Gemini and Groq, each status code).
+- `max_retries=0`: the SDK retries silently by default; retry/fallback belongs in one place (SMA-22).
+- Catch a subclass exception (`APITimeoutError`) before its parent (`APIConnectionError`).
+
+**What confused me**
+- …
