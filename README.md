@@ -6,7 +6,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > **Status:** v1.0 MVP in progress — Stage 1 (basic AI chatbot). Built in public.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
 > provider layer (Gemini + Groq adapters, model registry, automatic fallback),
-> `GET /api/models` and `POST /api/chat` (in-memory history). Next: the React frontend.
+> `GET /api/models`, `POST /api/chat` (in-memory history) and the frontend shell (React +
+> Vite, sidebar layout, API health indicator). Next: the chat UI.
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -15,7 +16,7 @@ React + TypeScript · FastAPI · SQLite + SQLAlchemy · MCP (Python SDK) · Gemi
 ## Prerequisites
 - **Python 3.12** (check with `py -3.12 --version` on Windows, `python3.12 --version` elsewhere)
 - **Git**
-- **Node 22 LTS** — only once the frontend exists (Stage 1, SMA-24)
+- **Node 22 LTS** and npm — for the frontend
 - Free API keys (optional to start; tests don't need them):
   - Gemini: [Google AI Studio](https://aistudio.google.com/apikey)
   - Groq: [Groq console](https://console.groq.com/keys)
@@ -59,6 +60,12 @@ cd ..
 pre-commit install
 ```
 
+### Frontend
+```bat
+cd frontend
+npm install
+```
+
 ## Run the API
 From `backend\` with the venv active:
 
@@ -79,6 +86,18 @@ Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` trusts every request.
 If `backend/app/services/llm/models.yaml` has a mistake, the server refuses to start and
 names the field (see [ADR-0001](docs/adr/0001-model-ids-only-in-models-yaml.md)).
 
+## Run the frontend
+In a second terminal (keep the API running):
+
+```bat
+cd frontend
+npm run dev
+```
+
+Open <http://localhost:5173>. The sidebar shows **API online** when the backend answers.
+React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
+`http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
+
 ## Tests and code quality
 Tests never call real AI APIs: they use a fake provider and a fake HTTP server.
 
@@ -88,6 +107,15 @@ pytest
 
 :: all hooks on all files: ruff (lint + import order), black (format), whitespace, YAML, secrets
 pre-commit run --all-files
+```
+
+Frontend (from `frontend\`):
+
+```bat
+npm test               :: Vitest + Testing Library (fetch is faked: no backend needed)
+npm run lint           :: ESLint
+npm run format:check   :: Prettier (npm run format to fix)
+npm run build          :: type-check + production build
 ```
 
 The hooks also run on every `git commit`. If one prints **Failed — files were modified**, the
@@ -122,7 +150,14 @@ backend/
     services/chat_history.py  in-memory conversations, per user
   scripts/             dev scripts that call real APIs
   tests/               pytest tests (no real API calls)
-frontend/              React app (from SMA-24)
+frontend/
+  src/
+    App.tsx            routes: every page renders inside the AppShell
+    api/               client.ts (fetch + our error format), one file per endpoint
+    components/        layout/ (AppShell, nav), HealthStatus, ui/ (shadcn/ui, generated)
+    pages/             one component per page (placeholders for now)
+    test/              Vitest setup and render helpers
+  vite.config.ts       plugins, @ alias, /api dev proxy, Vitest settings
 docs/
   adr/                 architecture decision records: why things are the way they are
   learning-log.md      what I did and learned, per ticket
