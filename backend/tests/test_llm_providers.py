@@ -170,6 +170,63 @@ def test_bad_key_or_model_is_a_config_error(provider_cls, status):
     assert caught.value.status_code == status
 
 
+# SMA-54: Gemini rejects a bad key with HTTP 400, not 401/403. This is the real body
+# (captured by hand with a fake key, 2026-11-15): list-wrapped, generic INVALID_ARGUMENT.
+GEMINI_BAD_KEY_BODY = [
+    {
+        "error": {
+            "code": 400,
+            "message": "Please pass a valid API key",
+            "status": "INVALID_ARGUMENT",
+        }
+    }
+]
+# Google's native API names the problem explicitly; accept that form too.
+GEMINI_KEY_INVALID_REASON_BODY = [
+    {
+        "error": {
+            "code": 400,
+            "message": "API key not valid.",
+            "status": "INVALID_ARGUMENT",
+            "details": [
+                {"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "API_KEY_INVALID"}
+            ],
+        }
+    }
+]
+
+
+@pytest.mark.parametrize("body", [GEMINI_BAD_KEY_BODY, GEMINI_KEY_INVALID_REASON_BODY])
+def test_gemini_400_for_a_bad_key_is_a_config_error(body):
+    provider, _ = make_provider(GeminiProvider, lambda r: httpx2.Response(400, json=body))
+
+    with pytest.raises(LLMConfigError) as caught:
+        provider.chat(MESSAGES)
+
+    assert caught.value.status_code == 400
+    assert "test-key" not in str(caught.value)  # the key itself is never in the message
+
+
+def test_gemini_other_400s_stay_ordinary_errors():
+    # A badly formed request is our bug, not a config problem: don't call it one.
+    body = [
+        {
+            "error": {
+                "code": 400,
+                "message": "Invalid JSON payload received.",
+                "status": "INVALID_ARGUMENT",
+            }
+        }
+    ]
+    provider, _ = make_provider(GeminiProvider, lambda r: httpx2.Response(400, json=body))
+
+    with pytest.raises(LLMError) as caught:
+        provider.chat(MESSAGES)
+
+    assert not isinstance(caught.value, LLMConfigError)
+    assert caught.value.status_code == 400
+
+
 @pytest.mark.parametrize("provider_cls", ADAPTERS)
 @pytest.mark.parametrize("status", [500, 502, 503])
 def test_5xx_is_provider_unavailable(provider_cls, status):

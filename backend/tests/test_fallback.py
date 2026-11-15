@@ -1,5 +1,8 @@
 """Tests for the FallbackManager, using FakeProviders only (no real APIs). SMA-22."""
 
+import logging
+
+import httpx2
 import pytest
 
 from app.services.llm.exceptions import (
@@ -11,6 +14,7 @@ from app.services.llm.exceptions import (
 )
 from app.services.llm.fake import FakeProvider
 from app.services.llm.fallback import DEFAULT_COOLDOWN_SECONDS, FallbackManager
+from app.services.llm.gemini import GeminiProvider
 from app.services.llm.registry import ModelRegistry
 
 MESSAGES = [{"role": "user", "content": "Explain osmosis."}]
@@ -225,6 +229,28 @@ def test_other_failures_also_fall_back_with_a_reason(error, reason):
     assert result.fallback_used is True
     assert result.fallback_reason == reason
     assert not manager.is_rate_limited("primary")  # only 429s start a cool-down
+
+
+def test_gemini_bad_key_400_falls_back_as_a_loud_config_error(caplog):
+    # SMA-54: the real Gemini adapter (fake HTTP server) as the primary model.
+    body = [{"error": {"code": 400, "message": "Please pass a valid API key"}}]
+    gemini = GeminiProvider(
+        {"id": "primary", "supports_tools": True, "supports_json": True},
+        api_key="test-key",
+        base_url="https://gemini.example.test/v1",
+        http_client=httpx2.Client(
+            transport=httpx2.MockTransport(lambda r: httpx2.Response(400, json=body))
+        ),
+    )
+    manager, _, _ = make_manager(primary=gemini)
+
+    with caplog.at_level(logging.WARNING):
+        result = manager.chat(MESSAGES)
+
+    assert result.response.text == "answer from no-tools"  # next by priority
+    assert result.fallback_reason == "primary: configuration error"
+    assert [r.levelname for r in caplog.records] == ["ERROR"]  # loud, not a warning
+    assert "test-key" not in caplog.text
 
 
 def test_all_models_failing_raises_one_clear_error():

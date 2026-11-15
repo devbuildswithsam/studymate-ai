@@ -31,7 +31,8 @@ class ProviderTimeoutError(LLMError):
 
 
 class LLMConfigError(LLMError):
-    """HTTP 401/403/404: wrong API key or model id. Retrying won't help; fix the config."""
+    """HTTP 401/403/404 (or Gemini's bad-key 400, SMA-54): wrong API key or model id.
+    Retrying won't help; fix the config."""
 
 
 class AllModelsFailedError(LLMError):
