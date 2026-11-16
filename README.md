@@ -158,6 +158,10 @@ Writing a migration on SQLite (lessons from SMA-33):
 ## Tests and code quality
 Tests never call real AI APIs: they use a fake provider and a fake HTTP server.
 
+`backend\tests\test_isolation.py` proves that user B gets **404** (never 403) on user A's
+chats and notes, and that nothing of A's changes. **Adding an endpoint with an id in its path?**
+Add it to `ISOLATION_CASES`: a guard test fails until every such route is covered.
+
 ```bat
 :: from backend\ (or the repo root) with the venv active
 pytest
