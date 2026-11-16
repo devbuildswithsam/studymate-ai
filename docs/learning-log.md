@@ -413,3 +413,28 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-33 — Migration exercise: add conversations.mode
+**Date:** 16 Nov 2026
+
+**What I did**
+- Added `conversations.mode` (general / study) with a new Alembic migration; existing chats became `general`.
+- Ran upgrade → downgrade → upgrade on my real `app.db` (3 chats, 8 messages, a note, 9 call logs): nothing lost.
+- Wrote a test that steps back over *every* migration and forward again with data in the database.
+
+**What Alembic generated vs. what I fixed by hand**
+- Generated: one line, `add_column('mode', String(20), nullable=False)`.
+- Problem 1: on a table with rows it fails ("Cannot add a NOT NULL column with default value NULL"). Fix: `server_default='general'`, in the migration and the model.
+- Problem 2: the CHECK constraint (general / study) wasn't generated at all. Fix: `create_check_constraint` by hand, and `drop_constraint` in downgrade.
+
+**What I learned**
+- **`default` vs `server_default`:** `default` only works when Python inserts a row; `server_default` is in the database, so existing rows get it too.
+- **Autogenerate is a draft:** it doesn't see CHECK constraints, and a NOT NULL column needs a default or a backfill.
+- **A hidden danger:** SQLite changes a table by rebuilding it (copy, drop, rename). With foreign keys on, dropping the old table runs ON DELETE rules, so a downgrade cut a note's link, and a CASCADE could have deleted every message. Foreign keys are now off while migrations run, followed by `PRAGMA foreign_key_check`.
+- **Test migrations with data,** both ways: the test also showed SMA-30's migration couldn't run again on a table with rows. It now backfills positions first.
+- **Back up before a downgrade,** and rehearse on a copy.
+
+**What confused me**
+- …
