@@ -1,6 +1,6 @@
 """conversations and messages (guide 7.1 + the extra columns from 7.5). SMA-28.
 
-conversations.mode (general / study) is added later, in SMA-33's migration exercise.
+conversations.mode (general / study) was added in SMA-33's migration exercise.
 """
 
 from datetime import datetime
@@ -26,16 +26,21 @@ if TYPE_CHECKING:  # for type hints only; avoids a circular import at runtime
 
 MESSAGE_ROLES = ("user", "assistant", "tool")
 MESSAGE_MODES = ("general", "grounded", "tool")  # the badge on an answer
+CONVERSATION_MODES = ("general", "study")  # study = chat about your documents (Stage 4)
 
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (CheckConstraint(allowed("mode", CONVERSATION_MODES), name="mode"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     # ON DELETE CASCADE: deleting a user deletes their conversations, in the database itself.
     # index: "this user's conversations" is the most common query.
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     title: Mapped[str | None] = mapped_column(String(200))
+    # server_default: the DATABASE fills it in. That's what gives existing rows a value
+    # when the column is added (SMA-33); default= alone only works for inserts from Python.
+    mode: Mapped[str] = mapped_column(String(20), default="general", server_default="general")
     provider: Mapped[str | None] = mapped_column(String(50))  # the model chosen for this chat
     model: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

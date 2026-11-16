@@ -45,6 +45,15 @@ def run_migrations_online() -> None:
     """Normal mode: connect and apply the migrations."""
     engine = make_engine(database_url())  # same engine setup as the app (foreign keys on)
     with engine.connect() as connection:
+        sqlite = connection.dialect.name == "sqlite"
+        if sqlite:
+            # Batch mode rebuilds a table: copy it, DROP the old one, rename the copy. With
+            # foreign keys on, that DROP runs the ON DELETE rules: CASCADE would delete every
+            # child row (all messages of all chats), SET NULL would cut every link. So they
+            # are off while migrations run (SMA-33). Must happen outside a transaction.
+            # Only this connection is affected: the app's connections still switch them on.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -54,6 +63,11 @@ def run_migrations_online() -> None:
         )
         with context.begin_transaction():
             context.run_migrations()
+        if sqlite:
+            # With the checks off, prove that nothing now points to a missing row.
+            broken = connection.exec_driver_sql("PRAGMA foreign_key_check").all()
+            if broken:
+                raise RuntimeError(f"Migration left broken foreign keys: {broken[:5]}")
     engine.dispose()
 
 
