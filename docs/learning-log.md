@@ -285,3 +285,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-27 — SQLAlchemy 2.0 + Alembic setup with SQLite
+**Date:** 16 Nov 2026
+
+**What I did**
+- Started Stage 2 (database). `app/db/`: the models' `Base`, an engine with SQLite foreign keys switched on, and the `get_db` dependency (one session per request).
+- `alembic init`, wired to the app's `DATABASE_URL` and `Base.metadata`; `alembic upgrade head` creates `backend/app.db`.
+- 5 tests, each on a temporary SQLite file (110 backend tests).
+
+**What I learned**
+- **Engine vs session:** the engine knows how to connect; a session is one unit of work. Nothing is saved until `commit()`, and closing without a commit throws the work away (a rollback).
+- **Migrations instead of `create_all()`:** `create_all` only creates missing tables; it never changes existing ones. Migrations are small, versioned scripts that move a real database (with data) from one schema to the next.
+- **SQLite ignores foreign keys** unless every connection runs `PRAGMA foreign_keys=ON`.
+- SQLite can't `ALTER` most things, so Alembic's "batch mode" rebuilds the table, and constraints need predictable names.
+- Mutation checks also find **unneeded** code: my explicit `rollback()` was redundant, so I removed it.
+- Library setup can have side effects: Alembic's logging config silenced the app's loggers until I set `disable_existing_loggers=False`.
+
+**What confused me**
+- …
