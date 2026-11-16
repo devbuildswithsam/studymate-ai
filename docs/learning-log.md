@@ -457,3 +457,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-35 — Turso compatibility spike + ADR
+**Date:** 16 Nov 2026
+
+**What I did**
+- Created a free Turso dev database and ran a spike: our real models, repositories and migrations against it.
+- Wrote ADR-0006. Decision: Turso is **not** adopted. v1.0 stays on SQLite; the v1.1 database gets chosen then.
+
+**What I learned**
+- **A spike answers a question, and "no" is a good answer.** Finding the problems now cost half a day; finding them after deploying would have cost real data.
+- **What failed, and why it matters:**
+  - Migrations lost data: Turso ignores `PRAGMA foreign_keys=OFF`, so rebuilding a table deleted the messages inside it.
+  - Database errors arrived as plain `ValueError`s, so code that checks for `IntegrityError` wouldn't recognise them.
+  - A dropped connection raised a Rust panic that `except Exception` can't catch.
+- **"Compatible" isn't "the same":** CRUD, JSON, transactions and foreign keys all worked, but the edges (migrations, errors, connection drops) didn't.
+- **Network databases are slower:** ~200 ms per query instead of ~0.05 ms, so a page that runs 10 queries waits about 2 seconds. Fewer queries per request matters on any hosted database.
+- **Keep secrets out of output:** the token stayed in `.env`; the spike only ever printed whether it was set.
+- **Test my own test scripts too:** two of the spike's first "failures" were bugs in my script, not in Turso.
+
+**What confused me**
+- …
