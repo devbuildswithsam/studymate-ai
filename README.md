@@ -234,7 +234,7 @@ frontend/
 docs/
   adr/                 architecture decision records: why things are the way they are
   learning-log.md      what I did and learned, per ticket
-experiments/           throwaway proofs of concept (e.g. Vercel streaming PoC)
+experiments/           throwaway proofs of concept (Vercel streaming PoC, Turso spike: ADR-0006)
 pyproject.toml         ruff, black and pytest settings
 ```
 
