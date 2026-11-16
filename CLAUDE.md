@@ -13,7 +13,9 @@ build with me one ticket at a time, and explain everything you do.
   Statuses: To Do → In Progress → In Review → Dev Complete (Prod Deployment is for v1.1+).
 
 ## Current state
-- Stage 0 is complete (tag `v0.0`). Next: **Stage 1, starting with SMA-20**.
+- Stage 0 is complete (tag `v0.0`). Stage 1 is complete (tag `v0.1`): chat API with fallback,
+  React chat UI, model selector and badges; chat history is still in memory.
+- Next: **Stage 2 (database), starting with SMA-27**.
 - Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
   v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
 
