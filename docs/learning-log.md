@@ -438,3 +438,22 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-34 — Two-user isolation tests
+**Date:** 16 Nov 2026
+
+**What I did**
+- One test file with two users, Alice and Bob. Bob tries every endpoint that takes an id on Alice's chat and note.
+- Bob always gets 404, Alice's data stays exactly the same, and lists and search never show him her items.
+- A guard test fails if a new endpoint with an id is added without an isolation test.
+
+**What I learned**
+- **404, not 403:** "forbidden" would tell Bob that Alice's chat exists. "Not found" reveals nothing, and Alice's chat looks exactly like an id that never existed.
+- **Testing identity:** replacing `get_current_user` in a test is like logging in as someone else, because it's the only place the app gets the user from.
+- **A test that has never failed proves nothing:** these passed at once, so I broke each user filter on purpose to see them fail.
+- **Test your tests:** my guard test read `app.routes`, which in this FastAPI version doesn't list our endpoints, so it checked an empty list and could never fail. It now reads the OpenAPI schema and also checks that it really sees routes.
+
+**What confused me**
+- …
