@@ -372,3 +372,23 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-31 — Sidebar conversation history with auto-generated titles
+**Date:** 16 Nov 2026
+
+**What I did**
+- "Recent chats" in the sidebar: open, rename, delete (with a confirmation), plus a New chat button.
+- Each chat has its own address (`/c/<id>`): a reload keeps it, and reopening it picks its model again.
+- New chats get a short AI title after the first answer (or the first words if the AI fails).
+
+**What I learned**
+- **Test the real model before choosing settings:** with a 20–60 token budget, both thinking models returned *nothing*. They need ~300 tokens even for a 5-word answer.
+- **Don't make the user wait for extras:** the title is a separate call after the answer, so the answer isn't slowed down.
+- **React Query cache keys:** the sidebar list and the open chat use different keys, so refreshing one never refetches the other. Adding the new turn to the cache means no refetch at all.
+- **The URL as state:** `/c/<id>` makes chats reloadable and linkable. A React `key` decides when a page starts fresh (New chat) and when it must keep its state (moving a new chat to its address).
+- **Small UX traps:** saving a rename on blur would also save when Escape closes the box; a prompt's instructions can leak into the output ("in One Sentence").
+
+**What confused me**
+- …
