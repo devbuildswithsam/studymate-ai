@@ -7,8 +7,9 @@ labelled with whether a fallback was used and why, so the UI can say so.
 import logging
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
+from typing import Literal
 
 from app.config import get_settings
 from app.services.llm.base import Capability, ChatOptions, ChatResponse, LLMProvider, Message
@@ -29,6 +30,20 @@ DEFAULT_COOLDOWN_SECONDS = 60  # how long to skip a model after a 429 with no wa
 
 
 @dataclass
+class Attempt:
+    """One real call to one model, successful or not: a row for the llm_calls log (SMA-30)."""
+
+    model: str
+    provider: str
+    status: Literal["ok", "error"]
+    error_type: str | None  # e.g. "rate_limited", "timeout"; None when status is "ok"
+    latency_ms: int
+    fallback_used: bool = False  # True when this isn't the model that was asked for
+    tokens_in: int | None = None  # only known when the model answered
+    tokens_out: int | None = None
+
+
+@dataclass
 class ChatResult:
     """An answer plus the label the UI shows ("answered by X because Y failed")."""
 
@@ -36,6 +51,7 @@ class ChatResult:
     requested_model: str
     fallback_used: bool
     fallback_reason: str | None  # e.g. "gemini-3.5-flash: rate-limited"
+    attempts: list[Attempt] = field(default_factory=list)  # every call made, in order
 
 
 class FallbackManager:
@@ -112,31 +128,80 @@ class FallbackManager:
             )
 
         reasons: list[str] = []
+        attempts: list[Attempt] = []
         for model in candidates:
             if self.is_rate_limited(model.id):
+                # Skipped without calling it, so it's not an attempt.
                 reasons.append(f"{model.id}: rate-limited (cooling down)")
                 continue
+            started = self.clock()
+            is_fallback = model.id != candidates[0].id
             try:
                 response = self._provider(model).chat(messages, options)
-            except RateLimitedError as e:
-                self._mark_rate_limited(model.id, e.retry_after)
-                reasons.append(f"{model.id}: rate-limited")
-            except LLMConfigError as e:
-                # Won't fix itself: log loudly, but still try the next model for the user.
-                logger.error("Config problem with %s: %s", model.id, e)
-                reasons.append(f"{model.id}: configuration error")
             except LLMError as e:
-                logger.warning("%s failed: %s", model.id, e)
-                reasons.append(f"{model.id}: {_short_reason(e)}")
+                attempts.append(
+                    Attempt(
+                        model.id,
+                        model.provider,
+                        "error",
+                        _error_type(e),
+                        self._ms(started),
+                        is_fallback,
+                    )
+                )
+                reasons.append(self._handle_failure(model, e))
             else:
+                attempts.append(
+                    Attempt(
+                        model.id,
+                        model.provider,
+                        "ok",
+                        None,
+                        self._ms(started),
+                        is_fallback,
+                        response.tokens_in,
+                        response.tokens_out,
+                    )
+                )
                 return ChatResult(
                     response=response,
                     requested_model=candidates[0].id,
-                    fallback_used=model.id != candidates[0].id,
+                    fallback_used=is_fallback,
                     fallback_reason="; ".join(reasons) or None,
+                    attempts=attempts,
                 )
 
-        raise AllModelsFailedError("no model could answer: " + "; ".join(reasons), reasons)
+        raise AllModelsFailedError(
+            "no model could answer: " + "; ".join(reasons), reasons, attempts
+        )
+
+    def _ms(self, started: float) -> int:
+        return round((self.clock() - started) * 1000)
+
+    def _handle_failure(self, model: ModelConfig, e: LLMError) -> str:
+        """React to one failed call; return the short reason shown to the user."""
+        if isinstance(e, RateLimitedError):
+            self._mark_rate_limited(model.id, e.retry_after)
+            return f"{model.id}: rate-limited"
+        if isinstance(e, LLMConfigError):
+            # Won't fix itself: log loudly, but still try the next model for the user.
+            logger.error("Config problem with %s: %s", model.id, e)
+            return f"{model.id}: configuration error"
+        logger.warning("%s failed: %s", model.id, e)
+        return f"{model.id}: {_short_reason(e)}"
+
+
+def _error_type(e: LLMError) -> str:
+    """A stable label for llm_calls.error_type."""
+    if isinstance(e, RateLimitedError):
+        return "rate_limited"
+    if isinstance(e, LLMConfigError):
+        return "config_error"
+    if isinstance(e, ProviderTimeoutError):
+        return "timeout"
+    if isinstance(e, ProviderUnavailableError):
+        return "unavailable"
+    return "error"
 
 
 def _short_reason(e: LLMError) -> str:

@@ -304,3 +304,60 @@ def test_without_fallback_a_working_model_still_answers():
 
     assert result.response.text == "answer from backup"
     assert result.fallback_used is False
+
+
+# --- Every real call is reported, for the llm_calls log (SMA-30) -------------------
+
+
+def test_a_fallback_answer_reports_the_failed_and_the_successful_call():
+    manager, _, _ = make_manager(primary=rate_limited())
+
+    result = manager.chat(MESSAGES)
+
+    assert [(a.model, a.provider, a.status, a.error_type) for a in result.attempts] == [
+        ("primary", "p", "error", "rate_limited"),
+        ("no-tools", "p", "ok", None),
+    ]
+    assert [a.fallback_used for a in result.attempts] == [False, True]
+    assert result.attempts[1].tokens_out == 3  # "answer from no-tools"
+    assert result.attempts[0].tokens_out is None
+
+
+def test_all_models_failing_still_reports_each_call():
+    manager, _, _ = make_manager(
+        primary=FakeProvider(error=LLMConfigError("bad key", "p")),
+        no_tools=FakeProvider(error=ProviderTimeoutError("slow", "p")),
+        backup=FakeProvider(error=ProviderUnavailableError("503", "p")),
+    )
+
+    with pytest.raises(AllModelsFailedError) as caught:
+        manager.chat(MESSAGES)
+
+    assert [a.error_type for a in caught.value.attempts] == [
+        "config_error",
+        "timeout",
+        "unavailable",
+    ]
+
+
+def test_a_model_skipped_while_cooling_down_is_not_a_call():
+    manager, _, _ = make_manager(primary=rate_limited(retry_after=30))
+    manager.chat(MESSAGES)  # primary gets rate-limited here
+
+    result = manager.chat(MESSAGES)  # primary is skipped without calling it
+
+    assert [a.model for a in result.attempts] == ["no-tools"]
+    assert result.attempts[0].fallback_used is True  # the first call, but not the chosen model
+
+
+def test_each_call_reports_its_latency():
+    clock = FakeClock()
+
+    class SlowFake(FakeProvider):
+        def chat(self, messages, options=None):
+            clock.advance(1.5)  # pretend the model took 1.5 seconds
+            return super().chat(messages, options)
+
+    manager = FallbackManager(REGISTRY, lambda m: SlowFake(), clock=clock)
+
+    assert manager.chat(MESSAGES).attempts[0].latency_ms == 1500

@@ -29,7 +29,7 @@ export function ChatPage() {
   const [draft, setDraft] = useState('')
   const [chosenModel, setChosenModel] = useState<string>()
   const [allowFallback, setAllowFallback] = useState(true)
-  const sendMessage = useSendMessage()
+  const sendMessage = useSendMessage(setConversationId) // SMA-30: remembered even if the AI fails
   const models = useModels()
 
   const modelList = models.data?.models ?? []

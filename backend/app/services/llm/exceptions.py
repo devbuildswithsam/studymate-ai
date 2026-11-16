@@ -38,6 +38,7 @@ class LLMConfigError(LLMError):
 class AllModelsFailedError(LLMError):
     """Every model that could answer the request failed (SMA-22). The message lists why."""
 
-    def __init__(self, message: str, reasons: list[str]):
+    def __init__(self, message: str, reasons: list[str], attempts: list | None = None):
         super().__init__(message, provider="fallback")
         self.reasons = reasons
+        self.attempts = attempts or []  # every call made (fallback.Attempt), for llm_calls

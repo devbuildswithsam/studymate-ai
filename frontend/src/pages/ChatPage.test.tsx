@@ -23,11 +23,27 @@ function reply(text: string, conversationId = 'conv-1') {
   }
 }
 
-/** The JSON bodies sent to POST /api/chat, in order. */
+/**
+ * The fake backend's chat routes (SMA-30): creating a conversation returns `id`, and
+ * messages sent into it get `answer`.
+ */
+function chat(answer: Parameters<typeof mockApi>[0][string], id = 'conv-1') {
+  return {
+    '/api/conversations': { status: 201, body: { id } },
+    [`/api/conversations/${id}/messages`]: answer,
+  }
+}
+
+/** The JSON bodies sent as chat messages, in order. */
 function chatBodies(fetch: ReturnType<typeof mockApi>) {
   return fetch.mock.calls
-    .filter(([url]) => url === '/api/chat')
+    .filter(([url]) => String(url).endsWith('/messages'))
     .map(([, init]) => JSON.parse(String(init?.body)))
+}
+
+/** The URLs that were POSTed to, in order. */
+function postedUrls(fetch: ReturnType<typeof mockApi>) {
+  return fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)
 }
 
 const messages = () => screen.getByRole('list', { name: 'Messages' })
@@ -39,7 +55,7 @@ describe('Chat page', () => {
     let answer: (r: Response) => void = () => {}
     const fetch = mockApi({
       '/api/health': HEALTH,
-      '/api/chat': () => new Promise<Response>((resolve) => (answer = resolve)), // we decide when
+      ...chat(() => new Promise<Response>((resolve) => (answer = resolve))), // we decide when
     })
     renderApp('/')
 
@@ -57,8 +73,11 @@ describe('Chat page', () => {
     expect(screen.queryByText('StudyMate is thinking…')).toBeNull()
   })
 
-  it('sends the conversation id with the next message, so the AI remembers', async () => {
-    const fetch = mockApi({ '/api/health': HEALTH, '/api/chat': reply('Answer.', 'conv-42') })
+  it('starts one conversation, then sends every message into it, so the AI remembers', async () => {
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      ...chat(reply('Answer.', 'conv-42'), 'conv-42'),
+    })
     renderApp('/')
 
     await userEvent.type(input(), 'First{Enter}')
@@ -66,15 +85,40 @@ describe('Chat page', () => {
     await userEvent.type(input(), 'Second{Enter}')
     await waitFor(() => expect(chatBodies(fetch)).toHaveLength(2))
 
-    expect(chatBodies(fetch)[1]).toEqual({
-      message: 'Second',
-      conversation_id: 'conv-42',
-      allow_fallback: true,
+    expect(postedUrls(fetch)).toEqual([
+      '/api/conversations',
+      '/api/conversations/conv-42/messages',
+      '/api/conversations/conv-42/messages',
+    ])
+    expect(chatBodies(fetch)[1]).toEqual({ message: 'Second', allow_fallback: true })
+  })
+
+  it('retries in the same conversation when the first answer fails', async () => {
+    let fail = true
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      ...chat(async () =>
+        fail
+          ? Response.json(
+              { error: { code: 'service_unavailable', message: 'busy' } },
+              { status: 503 },
+            )
+          : Response.json(reply('Now it works.').body),
+      ),
     })
+    renderApp('/')
+
+    await userEvent.type(input(), 'Hello{Enter}')
+    await screen.findByText(/The AI is busy right now/)
+    fail = false
+    await userEvent.click(sendButton()) // the text was given back: just send again
+
+    expect(await within(messages()).findByText('Now it works.')).toBeInTheDocument()
+    expect(postedUrls(fetch).filter((url) => url === '/api/conversations')).toHaveLength(1)
   })
 
   it('sends with Enter, and Shift+Enter adds a new line instead', async () => {
-    const fetch = mockApi({ '/api/health': HEALTH, '/api/chat': reply('OK') })
+    const fetch = mockApi({ '/api/health': HEALTH, ...chat(reply('OK')) })
     renderApp('/')
 
     await userEvent.type(input(), 'Line one{Shift>}{Enter}{/Shift}Line two')
@@ -86,7 +130,7 @@ describe('Chat page', () => {
   })
 
   it('cannot send an empty message', async () => {
-    const fetch = mockApi({ '/api/health': HEALTH, '/api/chat': reply('OK') })
+    const fetch = mockApi({ '/api/health': HEALTH, ...chat(reply('OK')) })
     renderApp('/')
 
     expect(sendButton()).toBeDisabled()
@@ -99,7 +143,7 @@ describe('Chat page', () => {
   it('cannot send again while waiting for an answer', async () => {
     const fetch = mockApi({
       '/api/health': HEALTH,
-      '/api/chat': () => new Promise<Response>(() => {}), // never answers
+      ...chat(() => new Promise<Response>(() => {})), // never answers
     })
     renderApp('/')
 
@@ -120,10 +164,10 @@ describe('Chat page', () => {
   it('shows a friendly toast when the AI is busy, and gives the text back', async () => {
     mockApi({
       '/api/health': HEALTH,
-      '/api/chat': {
+      ...chat({
         status: 503,
         body: { error: { code: 'service_unavailable', message: 'The AI is unavailable (…)' } },
-      },
+      }),
     })
     renderApp('/')
 
@@ -137,7 +181,7 @@ describe('Chat page', () => {
   it('shows a toast when the server cannot be reached', async () => {
     mockApi({
       '/api/health': HEALTH,
-      '/api/chat': () => Promise.reject(new TypeError('Failed to fetch')),
+      ...chat(() => Promise.reject(new TypeError('Failed to fetch'))),
     })
     renderApp('/')
 
@@ -149,10 +193,10 @@ describe('Chat page', () => {
   it("shows the backend's message for other errors (e.g. 422)", async () => {
     mockApi({
       '/api/health': HEALTH,
-      '/api/chat': {
+      ...chat({
         status: 422,
         body: { error: { code: 'validation_error', message: 'body.message: too long' } },
-      },
+      }),
     })
     renderApp('/')
 
@@ -165,7 +209,7 @@ describe('Chat page', () => {
 describe('Chat page when the backend is down behind the dev proxy', () => {
   it('shows "can\'t reach the server" for the proxy\'s empty 502', async () => {
     // What Vite's proxy really answers when FastAPI isn't running (checked by hand).
-    mockApi({ '/api/health': HEALTH, '/api/chat': async () => new Response('', { status: 502 }) })
+    mockApi({ '/api/health': HEALTH, ...chat(async () => new Response('', { status: 502 })) })
     renderApp('/')
 
     await userEvent.type(input(), 'Hello{Enter}')
@@ -204,7 +248,7 @@ describe('Chat page model selector and badges (SMA-26)', () => {
     const fetch = mockApi({
       '/api/health': HEALTH,
       '/api/models': MODELS,
-      '/api/chat': reply('Hi'),
+      ...chat(reply('Hi')),
     })
     renderApp('/')
 
@@ -220,7 +264,7 @@ describe('Chat page model selector and badges (SMA-26)', () => {
     const fetch = mockApi({
       '/api/health': HEALTH,
       '/api/models': MODELS,
-      '/api/chat': reply('Hi'),
+      ...chat(reply('Hi')),
     })
     renderApp('/')
 
@@ -237,7 +281,7 @@ describe('Chat page model selector and badges (SMA-26)', () => {
     const fetch = mockApi({
       '/api/health': HEALTH,
       '/api/models': MODELS,
-      '/api/chat': reply('Hi'),
+      ...chat(reply('Hi')),
     })
     renderApp('/')
 
@@ -258,7 +302,7 @@ describe('Chat page model selector and badges (SMA-26)', () => {
         fallback_reason: 'gemini-3.5-flash: rate-limited',
       },
     }
-    mockApi({ '/api/health': HEALTH, '/api/models': MODELS, '/api/chat': fallbackReply })
+    mockApi({ '/api/health': HEALTH, '/api/models': MODELS, ...chat(fallbackReply) })
     renderApp('/')
 
     await screen.findByRole('combobox', { name: 'Model' })
@@ -274,7 +318,7 @@ describe('Chat page model selector and badges (SMA-26)', () => {
   })
 
   it('still chats when the model list cannot be loaded (backend default model)', async () => {
-    const fetch = mockApi({ '/api/health': HEALTH, '/api/chat': reply('Hi') }) // /api/models -> 404
+    const fetch = mockApi({ '/api/health': HEALTH, ...chat(reply('Hi')) }) // /api/models -> 404
     renderApp('/')
 
     await userEvent.type(input(), 'Hello{Enter}')

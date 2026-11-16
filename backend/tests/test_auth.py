@@ -150,10 +150,10 @@ def test_local_mode_refuses_callers_from_other_machines(db_session, host):
     assert caught.value.status_code == 403
 
 
-def test_a_remote_chat_request_gets_403_in_the_error_shape(client):
+def test_a_remote_request_gets_403_in_the_error_shape(client):
     # Same app and seeded database as `client`, but the request comes from another machine.
     with TestClient(app, client=("203.0.113.5", 50000)) as remote:
-        response = remote.post("/api/chat", json={"message": "hi"})
+        response = remote.get("/api/conversations")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "forbidden"

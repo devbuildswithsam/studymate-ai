@@ -6,9 +6,10 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > **Status:** v1.0 MVP in progress — Stage 2 (database). Built in public.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
 > provider layer (Gemini + Groq adapters, model registry, automatic fallback),
-> `GET /api/models`, `POST /api/chat` (in-memory history), the frontend shell and the
-> **chat page** (Markdown + maths answers, copy button, friendly error toasts, model
-> selector with a "Use fallback" toggle, and badges showing which model answered).
+> `GET /api/models`, the frontend shell and the **chat page** (Markdown + maths answers,
+> copy button, friendly error toasts, model selector with a "Use fallback" toggle, and
+> badges showing which model answered). Stage 2: SQLite database with migrations, the local
+> user, and **conversations saved in the database** (they survive a restart).
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -84,9 +85,16 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Interactive API docs: <http://127.0.0.1:8000/docs>
 - `GET /api/health` — status, version, env and auth mode
 - `GET /api/models` — enabled models and their status (`available`, `rate_limited`, `no_key`)
-- `POST /api/chat` — send `{"message": "..."}` (plus `conversation_id` to continue a
-  conversation, optionally `model` and `allow_fallback`, default `true`). Returns the reply, which model answered, whether a
-  fallback was used, and token counts. History is in memory: a restart forgets it.
+- `GET /api/conversations` — your conversations, most recent activity first.
+  `POST` starts one (optionally `{"model": "..."}`)
+- `GET / PATCH / DELETE /api/conversations/{id}` — one conversation with its messages /
+  rename (`{"title": "..."}`) / delete it and its messages
+- `POST /api/conversations/{id}/messages` — chat: send `{"message": "..."}` (optionally
+  `model` and `allow_fallback`, default `true`). Returns the reply, which model answered,
+  whether a fallback was used, and token counts. The question and answer are saved, and every
+  model call (failed ones too) is logged in `llm_calls`.
+
+Another user's conversation always answers **404**, the same as one that doesn't exist.
 
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` treats every request as the local
 user, so it answers **403** to requests from other machines, and the app refuses to start with
@@ -106,7 +114,8 @@ npm run dev
 
 Open <http://localhost:5173> and chat on the **Chat** page (Enter sends, Shift+Enter adds a
 new line). The sidebar shows **API online** when the backend answers; if it's stopped, sending
-shows a "Can't reach the server" toast. Chats are kept in memory: restarting the API forgets them.
+shows a "Can't reach the server" toast. Chats are saved in `backend\app.db`, so restarting the
+API doesn't lose them (a sidebar to reopen old chats comes in SMA-31).
 React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
 `http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
 
@@ -172,11 +181,11 @@ backend/
                        seed.py (the local user)
     models/            tables: users, conversations + messages, notes, llm_calls
     errors.py          one error format: {"error": {"code", "message"}}
-    api/               routers: health.py, models.py, chat.py
+    api/               routers: health.py, models.py, conversations.py (CRUD + chat)
                        (+ deps.py: get_current_user, the only source of user_id)
+    repositories/      the only code that queries the database; every lookup takes user_id
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
-    services/chat_history.py  in-memory conversations, per user
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs
   tests/               pytest tests (no real API calls)

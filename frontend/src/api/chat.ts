@@ -1,12 +1,12 @@
-// POST /api/chat (backend: app/api/chat.py). SMA-25.
+// Chat messages, saved by the backend (app/api/conversations.py). SMA-25, SMA-30.
 import { useMutation } from '@tanstack/react-query'
 
 import { apiPost } from '@/api/client'
 
-/** Same fields as the backend's ChatRequest. */
+/** What the chat page sends. Without conversation_id, a new conversation is started. */
 export type ChatRequest = {
   message: string
-  conversation_id?: string // leave out to start a new conversation
+  conversation_id?: string
   model?: string
   allow_fallback?: boolean // SMA-26: false = only the chosen model may answer
 }
@@ -24,9 +24,23 @@ export type ChatReply = {
   tokens_out: number
 }
 
-/** useMutation: for actions that change something (useQuery is for reading). */
-export function useSendMessage() {
+/** Same fields as the backend's ConversationOut (only what we use so far). */
+type Conversation = { id: string }
+
+/**
+ * useMutation: for actions that change something (useQuery is for reading).
+ * onConversationCreated: called as soon as a new conversation exists, BEFORE the AI
+ * answers, so a failed answer can be retried in the same conversation.
+ */
+export function useSendMessage(onConversationCreated?: (id: string) => void) {
   return useMutation({
-    mutationFn: (request: ChatRequest) => apiPost<ChatReply>('/api/chat', request),
+    mutationFn: async ({ conversation_id, ...body }: ChatRequest) => {
+      let id = conversation_id
+      if (!id) {
+        id = (await apiPost<Conversation>('/api/conversations', {})).id
+        onConversationCreated?.(id)
+      }
+      return apiPost<ChatReply>(`/api/conversations/${id}/messages`, body)
+    },
   })
 }

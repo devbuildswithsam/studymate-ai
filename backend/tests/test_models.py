@@ -10,6 +10,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from app.db.base import Base
 from app.db.session import make_engine
@@ -76,9 +77,10 @@ def test_the_migration_matches_the_models(db_url):
 def test_a_conversation_has_messages_in_order_and_belongs_to_a_user(db_session):
     user = make_user(db_session)
     chat = Conversation(user=user, title="Osmosis", provider="gemini", model="gemini-3.5-flash")
-    chat.messages.append(Message(role="user", content="What is osmosis?"))
+    chat.messages.append(Message(position=1, role="user", content="What is osmosis?"))
     chat.messages.append(
         Message(
+            position=2,
             role="assistant",
             content="Water moving through a membrane.",
             provider="groq",
@@ -95,7 +97,8 @@ def test_a_conversation_has_messages_in_order_and_belongs_to_a_user(db_session):
     db_session.commit()
     db_session.expunge_all()  # forget the Python objects: read back from the database
 
-    loaded = db_session.get(Conversation, chat.id)
+    # selectinload: messages must be asked for up front (lazy="raise", SMA-30).
+    loaded = db_session.get(Conversation, chat.id, options=[selectinload(Conversation.messages)])
     assert [m.role for m in loaded.messages] == ["user", "assistant"]
     answer = loaded.messages[1]
     assert answer.fallback_used is True
@@ -107,7 +110,7 @@ def test_a_conversation_has_messages_in_order_and_belongs_to_a_user(db_session):
 
 def test_a_note_can_point_to_the_message_it_was_saved_from(db_session):
     user = make_user(db_session)
-    message = Message(role="assistant", content="Mitochondria make ATP.")
+    message = Message(position=1, role="assistant", content="Mitochondria make ATP.")
     db_session.add(Conversation(user=user, messages=[message]))
     note = Note(user=user, title="ATP", content="Mitochondria make ATP.", source_message=message)
     db_session.add(note)
@@ -123,7 +126,9 @@ def test_a_note_can_point_to_the_message_it_was_saved_from(db_session):
 
 def test_deleting_a_user_deletes_everything_they_own(db_session):
     user = make_user(db_session)
-    conversation = Conversation(user=user, messages=[Message(role="user", content="Hi")])
+    conversation = Conversation(
+        user=user, messages=[Message(position=1, role="user", content="Hi")]
+    )
     db_session.add_all(
         [
             conversation,
@@ -150,7 +155,7 @@ def test_deleting_a_user_deletes_everything_they_own(db_session):
 
 def test_deleting_a_message_keeps_the_note_saved_from_it(db_session):
     user = make_user(db_session)
-    message = Message(role="assistant", content="Keep me in a note.")
+    message = Message(position=1, role="assistant", content="Keep me in a note.")
     db_session.add(Conversation(user=user, messages=[message]))
     note = Note(user=user, title="t", content="Keep me in a note.", source_message=message)
     db_session.add(note)
@@ -198,10 +203,11 @@ def test_email_must_be_unique(db_session):
 @pytest.mark.parametrize(
     "bad_row",
     [
-        "INSERT INTO messages (id, conversation_id, role, content, fallback_used, created_at) "
-        "VALUES ('m1', :conversation_id, 'robot', 'x', 0, CURRENT_TIMESTAMP)",
-        "INSERT INTO messages (id, conversation_id, role, content, mode, fallback_used, created_at) "
-        "VALUES ('m2', :conversation_id, 'assistant', 'x', 'magic', 0, CURRENT_TIMESTAMP)",
+        "INSERT INTO messages (id, conversation_id, position, role, content, fallback_used, "
+        "created_at) VALUES ('m1', :conversation_id, 1, 'robot', 'x', 0, CURRENT_TIMESTAMP)",
+        "INSERT INTO messages (id, conversation_id, position, role, content, mode, fallback_used, "
+        "created_at) VALUES ('m2', :conversation_id, 1, 'assistant', 'x', 'magic', 0, "
+        "CURRENT_TIMESTAMP)",
         "INSERT INTO llm_calls (id, user_id, provider, model, mode, status, fallback_used, "
         "created_at) VALUES ('c1', :user_id, 'p', 'm', 'general', 'maybe', 0, CURRENT_TIMESTAMP)",
     ],

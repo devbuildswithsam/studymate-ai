@@ -14,8 +14,9 @@ build with me one ticket at a time, and explain everything you do.
 
 ## Current state
 - Stage 0 is complete (tag `v0.0`). Stage 1 is complete (tag `v0.1`): chat API with fallback,
-  React chat UI, model selector and badges; chat history is still in memory.
-- Next: **Stage 2 (database), starting with SMA-27**.
+  React chat UI, model selector and badges.
+- Stage 2 (database) in progress: SQLite + Alembic, local user, conversations and messages
+  saved in the database (SMA-27..30 done).
 - Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
   v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
 
