@@ -1,10 +1,19 @@
 """Shared pytest fixtures. SMA-20."""
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 
-from app.config import Settings, get_settings
+from app.config import BACKEND_DIR, Settings, get_settings
 from app.main import app
+
+
+def run_migrations(database_url: str) -> None:
+    """`alembic upgrade head` against the given database (SMA-27), from Python."""
+    config = Config(BACKEND_DIR / "alembic.ini")
+    config.set_main_option("sqlalchemy.url", database_url)
+    command.upgrade(config, "head")
 
 
 def settings_for_tests() -> Settings:

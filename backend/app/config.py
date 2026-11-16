@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     env: Literal["development", "test", "production"] = "development"
     auth_mode: Literal["local"] = "local"  # real auth arrives in Stage 5
     frontend_origin: str = "http://localhost:5173"
+    # SQLite file next to where you start the app (run uvicorn/alembic from backend/). SMA-27.
+    database_url: str = "sqlite:///./app.db"
 
     # SecretStr hides the value when printed or logged: Settings() shows '**********'.
     gemini_api_key: SecretStr | None = None

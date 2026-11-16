@@ -3,7 +3,7 @@
 An AI study assistant: chat, ask questions about your PDFs with page citations,
 summaries, quizzes, and study tasks created by the AI through MCP tools.
 
-> **Status:** v1.0 MVP in progress — Stage 1 (basic AI chatbot). Built in public.
+> **Status:** v1.0 MVP in progress — Stage 2 (database). Built in public.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
 > provider layer (Gemini + Groq adapters, model registry, automatic fallback),
 > `GET /api/models`, `POST /api/chat` (in-memory history), the frontend shell and the
@@ -42,6 +42,9 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 
 :: 3. Settings: copy the example, then put your API keys in .env
 copy .env.example .env
+
+:: 4. Database: create/upgrade backend\app.db (SQLite) to the latest migration
+alembic upgrade head
 ```
 
 `backend\.env` holds your secrets. It is git-ignored — **never commit it or paste it anywhere**.
@@ -52,6 +55,7 @@ copy .env.example .env
 | `ENV` | `development` | `development`, `test` or `production` |
 | `AUTH_MODE` | `local` | `local` = single user, no login. Refused when `ENV=production` |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only origin allowed by CORS |
+| `DATABASE_URL` | `sqlite:///./app.db` | The database. `./` = the folder you start from, so run the API and `alembic` from `backend\` |
 | `GEMINI_API_KEY`, `GROQ_API_KEY` | empty | Provider keys. A model without a key shows as `no_key` |
 
 Finally, turn on the commit hooks (from the repo root, venv active):
@@ -101,6 +105,19 @@ shows a "Can't reach the server" toast. Chats are kept in memory: restarting the
 React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
 `http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
 
+## Database migrations
+The schema is changed only through **Alembic migrations** (`backend\alembic\versions\`), never
+`create_all()`, so an existing database can be upgraded without losing data.
+From `backend\` with the venv active:
+
+```bat
+alembic upgrade head                                  :: apply all migrations (safe to repeat)
+alembic current                                       :: which migration the database is at
+alembic revision --autogenerate -m "add notes table"  :: draft a migration from model changes; always read it
+```
+
+`app.db` is git-ignored. Tests never touch it: each one uses a temporary SQLite file.
+
 ## Tests and code quality
 Tests never call real AI APIs: they use a fake provider and a fake HTTP server.
 
@@ -146,11 +163,13 @@ backend/
   app/
     main.py            FastAPI app: CORS, error handlers, routers
     config.py          settings from backend/.env (pydantic-settings)
+    db/                SQLAlchemy: base.py (models' base class), session.py (engine, get_db)
     errors.py          one error format: {"error": {"code", "message"}}
     api/               routers: health.py, models.py, chat.py (+ deps.py: current user)
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
     services/chat_history.py  in-memory conversations, per user
+  alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             dev scripts that call real APIs
   tests/               pytest tests (no real API calls)
 frontend/
