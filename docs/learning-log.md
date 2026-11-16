@@ -327,3 +327,25 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-29 — Single-user local auth mode with startup guard
+**Date:** 16 Nov 2026
+
+**What I did**
+- `python -m scripts.seed` creates the local user `local@studymate.dev` (safe to run again).
+- `get_current_user()` returns that user from the database; chat now runs as the real user id.
+- Guards: the app refuses to start with `ENV=production` + `AUTH_MODE=local`, and local mode answers 403 to other machines.
+- 17 tests (139 backend tests), including one that fails if any endpoint accepts `user_id`.
+
+**What I learned**
+- **Identity comes from one dependency.** Routes ask `Depends(get_current_user)`; they never read a user id from the request. Real auth in v1.1 changes only this function.
+- **Idempotent seed scripts:** "find, else create", so running twice can't make two users.
+- **Error messages can leak secrets:** pydantic's settings error printed every input value, API keys included. `hide_input_in_errors=True` fixes it, and a test keeps it fixed.
+- **Test the real startup:** a subprocess running `import app.main` proves the app exits, not just that a class raises.
+- **Turn rules into tests:** scanning the OpenAPI spec for `user_id` makes the "never from the request" rule automatic.
+- Mutation checks again: removing each guard made a test fail.
+
+**What confused me**
+- …
