@@ -164,6 +164,7 @@ backend/
     main.py            FastAPI app: CORS, error handlers, routers
     config.py          settings from backend/.env (pydantic-settings)
     db/                SQLAlchemy: base.py (models' base class), session.py (engine, get_db)
+    models/            tables: users, conversations + messages, notes, llm_calls
     errors.py          one error format: {"error": {"code", "message"}}
     api/               routers: health.py, models.py, chat.py (+ deps.py: current user)
     services/llm/      models.yaml (model registry), LLMProvider + adapters,

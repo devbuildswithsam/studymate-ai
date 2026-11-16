@@ -3,13 +3,14 @@
 - Database: the URL given to Alembic (tests pass a temp file), else the app's
   DATABASE_URL setting, so .env stays the single source.
 - target_metadata = Base.metadata: what `alembic revision --autogenerate` compares
-  the database against. Import app.models here once models exist (SMA-28).
+  the database against. Importing app.models fills it with every table (SMA-28).
 """
 
 from logging.config import fileConfig
 
 from alembic import context
 
+import app.models  # noqa: F401  (registers the tables on Base.metadata)
 from app.config import get_settings
 from app.db.base import Base
 from app.db.session import make_engine

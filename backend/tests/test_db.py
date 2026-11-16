@@ -4,12 +4,13 @@ Every test uses its own temporary SQLite file (pytest's tmp_path), never app.db.
 """
 
 import pytest
-from sqlalchemy import Column, ForeignKey, Integer, MetaData, Table, inspect, text
+from alembic.script import ScriptDirectory
+from sqlalchemy import Column, ForeignKey, Integer, MetaData, Table, text
 from sqlalchemy.exc import IntegrityError
 
 from app.config import Settings
 from app.db.session import get_db, make_engine
-from tests.conftest import run_migrations
+from tests.conftest import alembic_config, run_migrations
 
 
 def sqlite_url(tmp_path, name="test.db") -> str:
@@ -47,16 +48,18 @@ def test_foreign_keys_are_enforced(tmp_path):
 # --- Alembic ------------------------------------------------------------------------
 
 
-def test_alembic_upgrade_head_creates_an_empty_database(tmp_path):
+def test_alembic_upgrade_head_creates_the_database_at_the_latest_revision(tmp_path):
     db_file = tmp_path / "fresh.db"
     assert not db_file.exists()
 
     run_migrations(sqlite_url(tmp_path, "fresh.db"))
 
     assert db_file.exists()
-    app_tables = set(inspect(make_engine(sqlite_url(tmp_path, "fresh.db"))).get_table_names())
-    app_tables.discard("alembic_version")  # Alembic's own bookkeeping table
-    assert app_tables == set()  # no models yet: those arrive in SMA-28
+    head = ScriptDirectory.from_config(alembic_config("unused")).get_current_head()
+    with make_engine(sqlite_url(tmp_path, "fresh.db")).connect() as conn:
+        # alembic_version: Alembic's bookkeeping table, "this database is at revision X".
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
+    # Which tables exist is tested in test_models.py (SMA-28).
 
 
 # --- get_db: one session per request; commit keeps, error rolls back, always closed -
