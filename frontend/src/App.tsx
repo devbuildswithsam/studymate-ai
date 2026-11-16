@@ -4,6 +4,7 @@ import { Route, Routes, useLocation, useParams } from 'react-router'
 import { AppShell } from '@/components/layout/AppShell'
 import { NAV_ITEMS } from '@/components/layout/nav'
 import { ChatPage } from '@/pages/ChatPage'
+import { NotesPage } from '@/pages/NotesPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 
 /**
@@ -25,6 +26,7 @@ function ChatRoute() {
 // Pages that exist so far; the rest show a placeholder until their ticket is done.
 const PAGES: Record<string, () => React.JSX.Element> = {
   '/': ChatRoute,
+  '/notes': NotesPage,
 }
 
 export function AppRoutes() {
@@ -42,6 +44,7 @@ export function AppRoutes() {
           )
         })}
         <Route path="/c/:conversationId" element={<ChatRoute />} />
+        <Route path="/notes/:noteId" element={<NotesPage />} />
       </Route>
     </Routes>
   )

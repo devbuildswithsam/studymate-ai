@@ -96,7 +96,7 @@ export function addTurn(
           created_at: now,
         },
         {
-          id: `${conversationId}-a${turn}`,
+          id: reply.message_id, // the real id, so "Save as note" can point to it
           role: 'assistant',
           content: reply.reply,
           provider: reply.provider,

@@ -1,6 +1,7 @@
 // General chat (wireframe 6.1): messages, input, loading and friendly errors. SMA-25.
 // Model selector, "Use fallback" toggle and answer badges (wireframe 6.9). SMA-26.
 // Saved chats: reopen at /c/:id, continue with the same model, auto title (SMA-31).
+// "Save as note" on AI answers (SMA-32).
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -10,11 +11,13 @@ import { useSendMessage } from '@/api/chat'
 import { ApiError } from '@/api/client'
 import { addTurn, requestTitle, type SavedMessage, useConversation } from '@/api/conversations'
 import { type ModelInfo, useModels } from '@/api/models'
+import { useCreateNote } from '@/api/notes'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
 import { ModelSelector } from '@/components/chat/ModelSelector'
 import type { ChatMessage } from '@/components/chat/types'
 import { friendlyError } from '@/lib/errors'
+import { firstWords } from '@/lib/text'
 
 /** A saved message as the message list shows it, with badges on answers. */
 function toChatMessage(message: SavedMessage, models: ModelInfo[]): ChatMessage {
@@ -54,6 +57,7 @@ export function ChatPage({ conversationId, pageKey }: Props) {
   const [chosenModel, setChosenModel] = useState<string>()
   const [allowFallback, setAllowFallback] = useState(true)
   const sendMessage = useSendMessage(setCreatedId)
+  const createNote = useCreateNote()
   const models = useModels()
 
   const modelList = models.data?.models ?? []
@@ -101,6 +105,25 @@ export function ChatPage({ conversationId, pageKey }: Props) {
     )
   }
 
+  /** Save an answer as a note, linked to its message so the note shows where it came from. */
+  async function saveAsNote(answer: ChatMessage, question: string | undefined) {
+    const title = conversation.data?.title ?? (question ? firstWords(question) : 'Saved answer')
+    try {
+      const note = await createNote.mutateAsync({
+        title,
+        content: answer.content,
+        tags: [],
+        source_message_id: answer.id,
+      })
+      toast.success('Saved to Notes', {
+        action: { label: 'Open', onClick: () => navigate(`/notes/${note.id}`) },
+      })
+    } catch (error) {
+      toast.error(friendlyError(error))
+      throw error // so the button lets you try again
+    }
+  }
+
   if (conversation.isError) {
     const gone = conversation.error instanceof ApiError && conversation.error.status === 404
     return (
@@ -139,7 +162,11 @@ export function ChatPage({ conversationId, pageKey }: Props) {
             Ask a study question to get started, e.g. “Explain Newton&apos;s second law”.
           </p>
         )}
-        <MessageList messages={messages} isThinking={sendMessage.isPending} />
+        <MessageList
+          messages={messages}
+          isThinking={sendMessage.isPending}
+          onSaveAsNote={saveAsNote}
+        />
       </div>
       <ChatInput
         value={draft}

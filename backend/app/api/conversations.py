@@ -105,6 +105,7 @@ class SendMessage(BaseModel):
 
 class ChatReply(BaseModel):
     conversation_id: str
+    message_id: str  # the saved answer: lets the page "Save as note" (SMA-32)
     reply: str
     provider: str  # who actually answered (may differ from the request after a fallback)
     model: str
@@ -205,7 +206,7 @@ def send_message(
     if request.model:  # the user switched models: remember it for this conversation
         conversation.provider, conversation.model = registry.get(model_id).provider, model_id
     repo.add_message(db, conversation, role="user", content=request.message)
-    repo.add_message(
+    saved_answer = repo.add_message(
         db,
         conversation,
         role="assistant",
@@ -222,6 +223,7 @@ def send_message(
 
     return ChatReply(
         conversation_id=conversation_id,
+        message_id=saved_answer.id,
         reply=answer.text,
         provider=answer.provider,
         model=answer.model,

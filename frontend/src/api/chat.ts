@@ -15,6 +15,7 @@ export type ChatRequest = {
 /** Same fields as the backend's ChatReply. */
 export type ChatReply = {
   conversation_id: string
+  message_id: string // the saved answer's id: "Save as note" links to it (SMA-32)
   reply: string
   provider: string
   model: string

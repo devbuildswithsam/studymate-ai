@@ -31,10 +31,11 @@ const MODELS = {
   },
 }
 
-function reply(text: string, conversationId = 'conv-1') {
+function reply(text: string, conversationId = 'conv-1', messageId = 'answer-1') {
   return {
     body: {
       conversation_id: conversationId,
+      message_id: messageId, // SMA-32: the saved answer, for "Save as note"
       reply: text,
       provider: 'gemini',
       model: 'gemini-3.5-flash',
@@ -474,5 +475,117 @@ describe('A new chat after its first answer (SMA-31)', () => {
     await waitFor(() => expect(chatBodies(fetch)).toHaveLength(2))
 
     expect(postedUrls(fetch).filter((url) => String(url).endsWith('/title'))).toHaveLength(1)
+  })
+})
+
+describe('Save as note (SMA-32)', () => {
+  it('saves an answer as a note linked to its message, titled from the question', async () => {
+    let saved: unknown
+    mockApi({
+      '/api/health': HEALTH,
+      ...chat(reply('Osmosis is water moving through a membrane.', 'conv-1', 'answer-7')),
+      'POST /api/notes': async (init) => {
+        saved = JSON.parse(String(init?.body))
+        return Response.json({ id: 'note-1', ...(saved as object) }, { status: 201 })
+      },
+    })
+    renderApp('/')
+    await userEvent.type(input(), 'What is osmosis in plant roots and why does it matter?{Enter}')
+    const answer = (
+      await within(messages()).findByText('Osmosis is water moving through a membrane.')
+    ).closest('li')!
+
+    await userEvent.click(within(answer).getByRole('button', { name: 'Save as note' }))
+
+    expect(await within(answer).findByRole('button', { name: 'Saved to notes' })).toBeDisabled()
+    expect(saved).toEqual({
+      title: 'What is osmosis in plant roots…', // the chat has no title yet: the question's start
+      content: 'Osmosis is water moving through a membrane.',
+      tags: [],
+      source_message_id: 'answer-7',
+    })
+    expect(await screen.findByText('Saved to Notes')).toBeInTheDocument()
+  })
+
+  it('uses the chat title when there is one', async () => {
+    const SAVED = {
+      id: 'c9',
+      title: 'Osmosis in Plant Roots',
+      provider: 'gemini',
+      model: 'gemini-3.5-flash',
+      created_at: '2026-11-15T10:00:00Z',
+      updated_at: '2026-11-15T10:01:00Z',
+      messages: [
+        {
+          id: 'm1',
+          role: 'user',
+          content: 'What is osmosis?',
+          provider: null,
+          model: null,
+          mode: null,
+          fallback_used: false,
+          tokens_in: null,
+          tokens_out: null,
+          created_at: '2026-11-15T10:00:00Z',
+        },
+        {
+          id: 'm2',
+          role: 'assistant',
+          content: 'Water moving.',
+          provider: 'gemini',
+          model: 'gemini-3.5-flash',
+          mode: 'general',
+          fallback_used: false,
+          tokens_in: 5,
+          tokens_out: 2,
+          created_at: '2026-11-15T10:00:00Z',
+        },
+      ],
+    }
+    let saved: { title?: string; source_message_id?: string } = {}
+    mockApi({
+      '/api/health': HEALTH,
+      'GET /api/conversations/c9': { body: SAVED },
+      'POST /api/notes': async (init) => {
+        saved = JSON.parse(String(init?.body))
+        return Response.json({ id: 'note-2', ...saved }, { status: 201 })
+      },
+    })
+    renderApp('/c/c9')
+
+    const answer = (await within(messages()).findByText('Water moving.')).closest('li')!
+    await userEvent.click(within(answer).getByRole('button', { name: 'Save as note' }))
+
+    await waitFor(() => expect(saved.title).toBe('Osmosis in Plant Roots'))
+    expect(saved.source_message_id).toBe('m2')
+  })
+
+  it('lets me try again when saving fails', async () => {
+    mockApi({
+      '/api/health': HEALTH,
+      ...chat(reply('An answer.')),
+      'POST /api/notes': {
+        status: 503,
+        body: { error: { code: 'service_unavailable', message: 'Database is busy' } },
+      },
+    })
+    renderApp('/')
+    await userEvent.type(input(), 'Hi{Enter}')
+    const answer = (await within(messages()).findByText('An answer.')).closest('li')!
+
+    await userEvent.click(within(answer).getByRole('button', { name: 'Save as note' }))
+
+    expect(await screen.findByText(/Database is busy|busy right now/)).toBeInTheDocument()
+    expect(within(answer).getByRole('button', { name: 'Save as note' })).toBeEnabled()
+  })
+
+  it('my own messages have no "Save as note" button', async () => {
+    mockApi({ '/api/health': HEALTH, ...chat(reply('An answer.')) })
+    renderApp('/')
+    await userEvent.type(input(), 'My question{Enter}')
+    await within(messages()).findByText('An answer.')
+
+    const question = within(messages()).getByText('My question').closest('li')!
+    expect(within(question).queryByRole('button', { name: 'Save as note' })).toBeNull()
   })
 })

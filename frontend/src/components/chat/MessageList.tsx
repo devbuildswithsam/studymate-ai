@@ -2,19 +2,22 @@
 import { CopyButton } from '@/components/chat/CopyButton'
 import { Markdown } from '@/components/chat/Markdown'
 import { MessageBadges } from '@/components/chat/MessageBadges'
+import { SaveNoteButton } from '@/components/chat/SaveNoteButton'
 import type { ChatMessage } from '@/components/chat/types'
 import { cn } from '@/lib/utils'
 
 type Props = {
   messages: ChatMessage[]
   isThinking?: boolean // waiting for the AI's answer
+  // Shows "Save as note" on AI answers (SMA-32). Gets the answer and the question before it.
+  onSaveAsNote?: (answer: ChatMessage, question: string | undefined) => Promise<unknown>
 }
 
-export function MessageList({ messages, isThinking = false }: Props) {
+export function MessageList({ messages, isThinking = false, onSaveAsNote }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <ol aria-label="Messages" className="flex flex-col gap-4">
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const fromUser = message.role === 'user'
           return (
             <li key={message.id} className={cn('flex', fromUser ? 'justify-end' : 'justify-start')}>
@@ -35,7 +38,14 @@ export function MessageList({ messages, isThinking = false }: Props) {
                     <Markdown>{message.content}</Markdown>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       {message.meta ? <MessageBadges meta={message.meta} /> : <span />}
-                      <CopyButton text={message.content} />
+                      <div className="flex items-center">
+                        {onSaveAsNote && (
+                          <SaveNoteButton
+                            onSave={() => onSaveAsNote(message, messages[index - 1]?.content)}
+                          />
+                        )}
+                        <CopyButton text={message.content} />
+                      </div>
                     </div>
                   </>
                 )}

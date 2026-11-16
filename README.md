@@ -9,7 +9,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > `GET /api/models`, the frontend shell and the **chat page** (Markdown + maths answers,
 > copy button, friendly error toasts, model selector with a "Use fallback" toggle, and
 > badges showing which model answered). Stage 2: SQLite database with migrations, the local
-> user, and **conversations saved in the database** (they survive a restart).
+> user, **conversations saved in the database** (they survive a restart), a "Recent chats"
+> sidebar with AI titles, and **Notes** (search, edit, "Save as note" on any AI answer).
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -97,7 +98,13 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   (3–6 words; the first words of the message if the AI can't). A title that's already set,
   e.g. one you renamed, is never replaced.
 
-Another user's conversation always answers **404**, the same as one that doesn't exist.
+- `GET / POST /api/notes` — your notes (most recently edited first) / create one:
+  `{"title", "content", "tags": [...], "source_message_id"}` (the last two optional;
+  `source_message_id` must be an answer from one of your own chats)
+- `GET /api/notes/search?q=...` — notes whose title, content or tags contain `q` (any case)
+- `GET / PATCH / DELETE /api/notes/{id}` — read / edit (send only what changes) / delete
+
+Another user's conversation or note always answers **404**, the same as one that doesn't exist.
 
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` treats every request as the local
 user, so it answers **403** to requests from other machines, and the app refuses to start with
@@ -121,6 +128,8 @@ shows a "Can't reach the server" toast. Chats are saved in `backend\app.db`, so 
 API doesn't lose them. **Recent chats** in the sidebar reopens one (each chat has its own
 address, `/c/<id>`, and keeps the model it used); hover a chat to rename or delete it, and
 **New chat** starts an empty one. A new chat gets a short AI title after its first answer.
+The bookmark button under an AI answer saves it to **Notes**, where you can search, edit,
+tag and delete notes; a saved answer links back to its chat.
 React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
 `http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
 
@@ -186,7 +195,7 @@ backend/
                        seed.py (the local user)
     models/            tables: users, conversations + messages, notes, llm_calls
     errors.py          one error format: {"error": {"code", "message"}}
-    api/               routers: health.py, models.py, conversations.py (CRUD + chat)
+    api/               routers: health.py, models.py, conversations.py (CRUD + chat), notes.py
                        (+ deps.py: get_current_user, the only source of user_id)
     repositories/      the only code that queries the database; every lookup takes user_id
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
@@ -200,11 +209,13 @@ frontend/
     App.tsx            routes: every page renders inside the AppShell; "/" new chat,
                        "/c/:id" a saved chat
     api/               client.ts (fetch + our error format), one file per area
-                       (chat.ts, conversations.ts, models.ts, health.ts)
+                       (chat.ts, conversations.ts, notes.ts, models.ts, health.ts)
     components/        chat/ (MessageList, Markdown, ChatInput, CopyButton), layout/
-                       (AppShell, RecentChats), HealthStatus, ui/ (shadcn/ui, generated)
+                       (AppShell, RecentChats), notes/ (NoteEditor), HealthStatus,
+                       ui/ (shadcn/ui, generated)
     lib/               errors.ts (friendly error messages), utils.ts
-    pages/             one component per page (ChatPage; the rest are placeholders)
+    pages/             one component per page (ChatPage, NotesPage; the rest are placeholders)
+    hooks/             useDebouncedValue (search as you type)
     test/              Vitest setup and render helpers
   vite.config.ts       plugins, @ alias, /api dev proxy, Vitest settings
 docs/
