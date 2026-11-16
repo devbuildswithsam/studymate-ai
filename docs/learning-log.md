@@ -392,3 +392,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-32 — Notes: CRUD, search and "Save as note" from chat
+**Date:** 16 Nov 2026
+
+**What I did**
+- Notes API: list, create, read, edit, delete, and search (title, content or tags).
+- A bookmark button under every AI answer saves it as a note that links back to its chat.
+- A Notes page: search as you type, a list, + New note, and an editor with Save and Delete.
+
+**What I learned**
+- **LIKE wildcards:** in SQL `LIKE`, `%` and `_` are wildcards. User text must be escaped, or searching "%" matches everything.
+- **Check ownership of every id you're given:** `source_message_id` comes from the browser, so the backend checks it belongs to one of *my* chats before linking it.
+- **N+1 on a list:** showing each note's source chat could cost one query per note; `selectinload` loads them all at once. A test counts the queries for 1 note and for 10.
+- **Route order matters:** `/notes/search` must come before `/notes/{id}`.
+- **Debouncing:** wait for a pause in typing before searching, so the server gets one request, not one per letter.
+- **`keepPreviousData`:** keep showing the old list while new results load, instead of flashing an empty list.
+
+**What confused me**
+- …
