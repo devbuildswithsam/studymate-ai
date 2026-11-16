@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.config import BACKEND_DIR, Settings, get_settings
+from app.db.seed import ensure_local_user
 from app.db.session import make_engine
 from app.main import app
 
@@ -39,15 +40,19 @@ def db_session(db_url):
     engine.dispose()
 
 
-def settings_for_tests() -> Settings:
+def settings_for_tests(database_url: str) -> Settings:
     # _env_file=None: ignore backend/.env so tests never see real keys or local tweaks.
-    return Settings(_env_file=None, env="test", auth_mode="local")
+    return Settings(_env_file=None, env="test", auth_mode="local", database_url=database_url)
 
 
 @pytest.fixture
-def client():
+def client(db_url, db_session):
+    """The app on a temporary database that already holds the seeded local user (SMA-29)."""
+    ensure_local_user(db_session)
+    settings = settings_for_tests(db_url)
     # Dependency injection pays off: swap get_settings for the test version.
-    app.dependency_overrides[get_settings] = settings_for_tests
-    with TestClient(app) as c:
+    app.dependency_overrides[get_settings] = lambda: settings
+    # client=127.0.0.1: requests come from this computer, like the browser via Vite.
+    with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()

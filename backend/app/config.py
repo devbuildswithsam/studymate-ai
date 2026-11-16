@@ -18,8 +18,13 @@ APP_VERSION = "0.1.0"
 class Settings(BaseSettings):
     # Absolute path, so it works no matter which folder you start uvicorn from.
     # extra="ignore": .env may hold keys this class doesn't use (yet).
+    # hide_input_in_errors: a settings error would otherwise print every value, API keys
+    # included, into the terminal and logs (found in SMA-29).
     model_config = SettingsConfigDict(
-        env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=BACKEND_DIR / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        hide_input_in_errors=True,
     )
 
     env: Literal["development", "test", "production"] = "development"

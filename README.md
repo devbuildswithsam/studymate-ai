@@ -45,6 +45,9 @@ copy .env.example .env
 
 :: 4. Database: create/upgrade backend\app.db (SQLite) to the latest migration
 alembic upgrade head
+
+:: 5. Create the local user (local@studymate.dev). Safe to run again
+python -m scripts.seed
 ```
 
 `backend\.env` holds your secrets. It is git-ignored — **never commit it or paste it anywhere**.
@@ -53,7 +56,7 @@ alembic upgrade head
 | Setting | Default | Meaning |
 |---|---|---|
 | `ENV` | `development` | `development`, `test` or `production` |
-| `AUTH_MODE` | `local` | `local` = single user, no login. Refused when `ENV=production` |
+| `AUTH_MODE` | `local` | `local` = single user, no login, only requests from this computer. Refused when `ENV=production` |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only origin allowed by CORS |
 | `DATABASE_URL` | `sqlite:///./app.db` | The database. `./` = the folder you start from, so run the API and `alembic` from `backend\` |
 | `GEMINI_API_KEY`, `GROQ_API_KEY` | empty | Provider keys. A model without a key shows as `no_key` |
@@ -85,7 +88,9 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   conversation, optionally `model` and `allow_fallback`, default `true`). Returns the reply, which model answered, whether a
   fallback was used, and token counts. History is in memory: a restart forgets it.
 
-Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` trusts every request.
+Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` treats every request as the local
+user, so it answers **403** to requests from other machines, and the app refuses to start with
+`ENV=production`. If chat says "The local user is missing", run `python -m scripts.seed`.
 `--reload` restarts the server when you save a file.
 
 If `backend/app/services/llm/models.yaml` has a mistake, the server refuses to start and
@@ -163,15 +168,17 @@ backend/
   app/
     main.py            FastAPI app: CORS, error handlers, routers
     config.py          settings from backend/.env (pydantic-settings)
-    db/                SQLAlchemy: base.py (models' base class), session.py (engine, get_db)
+    db/                SQLAlchemy: base.py (models' base class), session.py (engine, get_db),
+                       seed.py (the local user)
     models/            tables: users, conversations + messages, notes, llm_calls
     errors.py          one error format: {"error": {"code", "message"}}
-    api/               routers: health.py, models.py, chat.py (+ deps.py: current user)
+    api/               routers: health.py, models.py, chat.py
+                       (+ deps.py: get_current_user, the only source of user_id)
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
     services/chat_history.py  in-memory conversations, per user
   alembic/             database migrations (env.py wired to the app's settings and models)
-  scripts/             dev scripts that call real APIs
+  scripts/             seed.py (local user) and dev scripts that call real APIs
   tests/               pytest tests (no real API calls)
 frontend/
   src/
