@@ -306,3 +306,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-28 — Models and first migration: users, conversations, messages, notes, llm_calls
+**Date:** 16 Nov 2026
+
+**What I did**
+- Five SQLAlchemy models in `app/models/` and one Alembic migration that creates them (and drops them on downgrade).
+- 17 tests on a temporary database built by the real migration (122 backend tests).
+- Ran upgrade → downgrade → upgrade on my own `app.db`.
+
+**What I learned**
+- **Foreign keys + `ON DELETE`:** CASCADE deletes the children too (user → conversations → messages); SET NULL keeps the row and empties the link (a note survives when its chat message is deleted).
+- **Indexes** on `user_id` / `conversation_id` make "this user's conversations" fast; the database doesn't add them for you.
+- **CHECK constraints** let the database refuse bad values (`role = 'robot'`), even when the Python code has a bug.
+- **Autogenerate writes a draft:** read every line. A test that compares the models with the migrated database catches "changed a model, forgot the migration".
+- Testing with plain SQL (`DELETE FROM users`) proves the *database* cascades, not just the ORM.
+- `TYPE_CHECKING` imports give type hints between models without circular imports.
+
+**What confused me**
+- …
