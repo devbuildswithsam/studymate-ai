@@ -15,8 +15,10 @@ build with me one ticket at a time, and explain everything you do.
 ## Current state
 - Stage 0 is complete (tag `v0.0`). Stage 1 is complete (tag `v0.1`): chat API with fallback,
   React chat UI, model selector and badges.
-- Stage 2 (database) in progress: SQLite + Alembic, local user, conversations and messages
-  saved in the database (SMA-27..30 done).
+- Stage 2 is complete (tag `v0.2`): SQLite + Alembic (migrations tested both ways with data),
+  local user with startup guard, chats and messages saved, sidebar with AI titles, Notes,
+  two-user isolation suite. Turso failed its spike (ADR-0006): v1.0 stays on SQLite.
+- Next: **Stage 3 (MCP), starting with SMA-36**.
 - Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
   v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
 
