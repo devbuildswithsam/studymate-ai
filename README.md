@@ -93,6 +93,9 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   `model` and `allow_fallback`, default `true`). Returns the reply, which model answered,
   whether a fallback was used, and token counts. The question and answer are saved, and every
   model call (failed ones too) is logged in `llm_calls`.
+- `POST /api/conversations/{id}/title` — the AI names the chat after its first message
+  (3–6 words; the first words of the message if the AI can't). A title that's already set,
+  e.g. one you renamed, is never replaced.
 
 Another user's conversation always answers **404**, the same as one that doesn't exist.
 
@@ -115,7 +118,9 @@ npm run dev
 Open <http://localhost:5173> and chat on the **Chat** page (Enter sends, Shift+Enter adds a
 new line). The sidebar shows **API online** when the backend answers; if it's stopped, sending
 shows a "Can't reach the server" toast. Chats are saved in `backend\app.db`, so restarting the
-API doesn't lose them (a sidebar to reopen old chats comes in SMA-31).
+API doesn't lose them. **Recent chats** in the sidebar reopens one (each chat has its own
+address, `/c/<id>`, and keeps the model it used); hover a chat to rename or delete it, and
+**New chat** starts an empty one. A new chat gets a short AI title after its first answer.
 React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
 `http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
 
@@ -186,15 +191,18 @@ backend/
     repositories/      the only code that queries the database; every lookup takes user_id
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
+    services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs
   tests/               pytest tests (no real API calls)
 frontend/
   src/
-    App.tsx            routes: every page renders inside the AppShell
-    api/               client.ts (fetch + our error format), one file per endpoint
-    components/        chat/ (MessageList, Markdown, ChatInput, CopyButton), layout/,
-                       HealthStatus, ui/ (shadcn/ui, generated)
+    App.tsx            routes: every page renders inside the AppShell; "/" new chat,
+                       "/c/:id" a saved chat
+    api/               client.ts (fetch + our error format), one file per area
+                       (chat.ts, conversations.ts, models.ts, health.ts)
+    components/        chat/ (MessageList, Markdown, ChatInput, CopyButton), layout/
+                       (AppShell, RecentChats), HealthStatus, ui/ (shadcn/ui, generated)
     lib/               errors.ts (friendly error messages), utils.ts
     pages/             one component per page (ChatPage; the rest are placeholders)
     test/              Vitest setup and render helpers

@@ -230,3 +230,13 @@ def test_every_attempt_is_logged_as_an_llm_call(db_session, alice):
         (False, None, "general"),
         (True, 20, "general"),
     ]
+
+
+def test_first_user_message(db_session, alice, bob):
+    conversation = repo.create_conversation(db_session, alice.id)
+    assert repo.first_user_message(db_session, alice.id, conversation.id) is None
+
+    add_messages(db_session, conversation, "q1", "a1", "q2")
+
+    assert repo.first_user_message(db_session, alice.id, conversation.id).content == "q1"
+    assert repo.first_user_message(db_session, bob.id, conversation.id) is None

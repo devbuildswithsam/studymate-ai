@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { HealthStatus } from '@/components/HealthStatus'
-import { mockFetch, renderApp, renderWithQuery } from '@/test/render'
+import { mockApi, mockFetch, renderApp, renderWithQuery } from '@/test/render'
 
 const HEALTHY = { status: 'ok', version: '0.1.0', env: 'development', auth_mode: 'local' }
 
@@ -61,7 +61,7 @@ describe('HealthStatus', () => {
   })
 
   it('is shown in the sidebar of the app shell', async () => {
-    mockFetch(HEALTHY)
+    mockApi({ '/api/health': { body: HEALTHY } }) // the whole app: one answer per path
 
     renderApp('/')
 

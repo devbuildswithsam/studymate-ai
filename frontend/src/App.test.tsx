@@ -3,7 +3,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { mockFetch, renderApp } from '@/test/render'
+import { mockApi, renderApp } from '@/test/render'
 
 const PAGES = [
   ['Chat', '/'],
@@ -17,7 +17,9 @@ const PAGES = [
 
 describe('App shell', () => {
   beforeEach(() => {
-    mockFetch({ status: 'ok', version: '0.1.0', env: 'test', auth_mode: 'local' })
+    mockApi({
+      '/api/health': { body: { status: 'ok', version: '0.1.0', env: 'test', auth_mode: 'local' } },
+    })
   })
 
   it('shows the app name and a link to every page in the sidebar', () => {

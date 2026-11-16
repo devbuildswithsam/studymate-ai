@@ -1,7 +1,8 @@
 // Chat messages, saved by the backend (app/api/conversations.py). SMA-25, SMA-30.
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { apiPost } from '@/api/client'
+import { LIST_KEY } from '@/api/conversations'
 
 /** What the chat page sends. Without conversation_id, a new conversation is started. */
 export type ChatRequest = {
@@ -33,6 +34,7 @@ type Conversation = { id: string }
  * answers, so a failed answer can be retried in the same conversation.
  */
 export function useSendMessage(onConversationCreated?: (id: string) => void) {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ conversation_id, ...body }: ChatRequest) => {
       let id = conversation_id
@@ -42,5 +44,8 @@ export function useSendMessage(onConversationCreated?: (id: string) => void) {
       }
       return apiPost<ChatReply>(`/api/conversations/${id}/messages`, body)
     },
+    // The chat moved to the top of "Recent chats" (SMA-31). Set here, not in mutate(),
+    // so it still runs if the page changes before the answer arrives.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: LIST_KEY }),
   })
 }

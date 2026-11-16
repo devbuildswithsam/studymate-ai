@@ -464,3 +464,84 @@ def test_fallback_is_on_by_default(chat_client, fakes):
 
 def test_the_old_in_memory_chat_endpoint_is_gone(chat_client):
     assert chat_client.post("/api/chat", json={"message": "hi"}).status_code == 404
+
+
+# --- Auto titles (SMA-31) ----------------------------------------------------------
+
+
+def make_title(client, conversation_id):
+    return client.post(f"/api/conversations/{conversation_id}/title")
+
+
+def test_a_title_is_generated_from_the_first_message_and_saved(chat_client, fakes):
+    fakes["main"].replies = ["Osmosis moves water.", "Osmosis in Plant Roots"]
+    conversation_id = new_conversation(chat_client)
+    send(chat_client, "What is osmosis?", conversation_id)
+
+    response = make_title(chat_client, conversation_id)
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Osmosis in Plant Roots"
+    title_prompt = fakes["main"].calls[1]
+    assert title_prompt[1] == {"role": "user", "content": "What is osmosis?"}
+    listed = chat_client.get("/api/conversations").json()
+    assert listed[0]["title"] == "Osmosis in Plant Roots"
+
+
+def test_the_title_uses_the_conversations_model(chat_client, fakes):
+    conversation_id = new_conversation(chat_client, model="backup")
+    send(chat_client, "What is osmosis?", conversation_id)
+
+    make_title(chat_client, conversation_id)
+
+    assert fakes["main"].calls == []
+    assert len(fakes["backup"].calls) == 2  # the answer, then the title
+
+
+def test_an_existing_title_is_kept_and_no_ai_call_is_made(chat_client, fakes):
+    conversation_id = new_conversation(chat_client)
+    send(chat_client, "What is osmosis?", conversation_id)
+    chat_client.patch(f"/api/conversations/{conversation_id}", json={"title": "My own title"})
+    calls_before = len(fakes["main"].calls)
+
+    response = make_title(chat_client, conversation_id)
+
+    assert response.json()["title"] == "My own title"  # a rename always wins
+    assert len(fakes["main"].calls) == calls_before
+
+
+def test_a_title_needs_a_message_first(chat_client, fakes):
+    conversation_id = new_conversation(chat_client)
+
+    response = make_title(chat_client, conversation_id)
+
+    assert response.status_code == 409
+    assert fakes["main"].calls == []
+
+
+def test_when_the_ai_fails_the_title_is_the_first_words_and_calls_are_logged(
+    chat_client, fakes, db_session
+):
+    conversation_id = new_conversation(chat_client)
+    send(chat_client, "Explain the Krebs cycle step by step please", conversation_id)
+    fakes["main"].error = ProviderUnavailableError("503", "gemini")
+    fakes["backup"].error = ProviderUnavailableError("503", "groq")
+
+    response = make_title(chat_client, conversation_id)
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Explain the Krebs cycle step by…"
+    title_calls = db_session.scalars(select(LLMCall).where(LLMCall.mode == "title")).all()
+    assert sorted((c.model, c.status) for c in title_calls) == [
+        ("backup", "error"),
+        ("main", "error"),
+    ]
+
+
+def test_another_users_conversation_gets_no_title(chat_client, bob, fakes):
+    alices = new_conversation(chat_client)
+    send(chat_client, "hi", alices)
+
+    app.dependency_overrides[get_current_user_id] = lambda: bob.id
+
+    assert make_title(chat_client, alices).status_code == 404

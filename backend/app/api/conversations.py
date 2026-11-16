@@ -5,6 +5,7 @@ GET        /api/conversations/{id}       one conversation with its messages
 PATCH      /api/conversations/{id}       rename
 DELETE     /api/conversations/{id}       delete (its messages too)
 POST       /api/conversations/{id}/messages   ask the AI; question + answer are saved
+POST       /api/conversations/{id}/title      AI title from the first message (SMA-31)
 
 The user comes only from get_current_user_id, never from the request. Each request is one
 transaction: the repositories never commit, these routes commit once at the end.
@@ -25,6 +26,7 @@ from app.services.llm.base import ChatOptions
 from app.services.llm.exceptions import AllModelsFailedError, LLMConfigError
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
+from app.services.titles import generate_title
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -228,6 +230,31 @@ def send_message(
         tokens_in=answer.tokens_in,
         tokens_out=answer.tokens_out,
     )
+
+
+@router.post("/{conversation_id}/title", response_model=ConversationOut)
+def create_title(
+    conversation_id: str,
+    user_id: CurrentUserId,
+    db: Db,
+    registry: Registry,
+    manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
+) -> Conversation:
+    """Name the conversation after its first message. A separate call, so the first
+    answer isn't slowed down: the page asks for it once the answer has arrived."""
+    conversation = my_conversation(db, user_id, conversation_id)
+    if conversation.title:
+        return conversation  # already named (maybe renamed by the user): keep it
+    first = repo.first_user_message(db, user_id, conversation_id)
+    if first is None:
+        raise HTTPException(409, "Send a message before asking for a title")
+
+    model_id = conversation.model or registry.default_model("chat")
+    result = generate_title(manager, first.content, model_id)
+    conversation.title = result.title
+    repo.log_llm_calls(db, user_id, conversation_id, result.attempts, "title")
+    db.commit()
+    return conversation
 
 
 # --- Helpers -----------------------------------------------------------------------

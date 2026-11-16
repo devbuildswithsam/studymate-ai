@@ -79,6 +79,22 @@ def recent_messages(db: Session, user_id: str, conversation_id: str, limit: int)
     return list(reversed(db.scalars(query).all()))  # ...then back to oldest first
 
 
+def first_user_message(db: Session, user_id: str, conversation_id: str) -> Message | None:
+    """The question that started the conversation (used for its title, SMA-31)."""
+    query = (
+        select(Message)
+        .join(Conversation)
+        .where(
+            Message.conversation_id == conversation_id,
+            Conversation.user_id == user_id,
+            Message.role == "user",
+        )
+        .order_by(Message.position)
+        .limit(1)
+    )
+    return db.scalar(query)
+
+
 def add_message(db: Session, conversation: Conversation, **fields) -> Message:
     """Append a message at the next position.
 

@@ -7,6 +7,30 @@ import { mockApi, renderApp } from '@/test/render'
 
 const HEALTH = { body: { status: 'ok', version: '0.1.0', env: 'test', auth_mode: 'local' } }
 
+const MODELS = {
+  body: {
+    default_model: 'gemini-3.5-flash',
+    models: [
+      {
+        id: 'gemini-3.5-flash',
+        provider: 'gemini',
+        display_name: 'Gemini 3.5 Flash',
+        supports_tools: true,
+        supports_json: true,
+        status: 'available',
+      },
+      {
+        id: 'openai/gpt-oss-120b',
+        provider: 'groq',
+        display_name: 'GPT-OSS 120B (Groq)',
+        supports_tools: true,
+        supports_json: true,
+        status: 'available',
+      },
+    ],
+  },
+}
+
 function reply(text: string, conversationId = 'conv-1') {
   return {
     body: {
@@ -29,7 +53,7 @@ function reply(text: string, conversationId = 'conv-1') {
  */
 function chat(answer: Parameters<typeof mockApi>[0][string], id = 'conv-1') {
   return {
-    '/api/conversations': { status: 201, body: { id } },
+    'POST /api/conversations': { status: 201, body: { id } },
     [`/api/conversations/${id}/messages`]: answer,
   }
 }
@@ -88,6 +112,7 @@ describe('Chat page', () => {
     expect(postedUrls(fetch)).toEqual([
       '/api/conversations',
       '/api/conversations/conv-42/messages',
+      '/api/conversations/conv-42/title', // SMA-31: named after the first answer
       '/api/conversations/conv-42/messages',
     ])
     expect(chatBodies(fetch)[1]).toEqual({ message: 'Second', allow_fallback: true })
@@ -219,29 +244,6 @@ describe('Chat page when the backend is down behind the dev proxy', () => {
 })
 
 describe('Chat page model selector and badges (SMA-26)', () => {
-  const MODELS = {
-    body: {
-      default_model: 'gemini-3.5-flash',
-      models: [
-        {
-          id: 'gemini-3.5-flash',
-          provider: 'gemini',
-          display_name: 'Gemini 3.5 Flash',
-          supports_tools: true,
-          supports_json: true,
-          status: 'available',
-        },
-        {
-          id: 'openai/gpt-oss-120b',
-          provider: 'groq',
-          display_name: 'GPT-OSS 120B (Groq)',
-          supports_tools: true,
-          supports_json: true,
-          status: 'available',
-        },
-      ],
-    },
-  }
   const modelSelect = () => screen.getByRole('combobox', { name: 'Model' })
 
   it('starts on the default model and sends it, with fallback on', async () => {
@@ -326,5 +328,151 @@ describe('Chat page model selector and badges (SMA-26)', () => {
     expect(await within(messages()).findByText('Hi')).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull()
     expect(chatBodies(fetch)[0]).toEqual({ message: 'Hello', allow_fallback: true })
+  })
+})
+
+describe('Reopening and continuing a saved chat (SMA-31)', () => {
+  const SAVED = {
+    id: 'c9',
+    title: 'Osmosis in Plant Roots',
+    provider: 'groq',
+    model: 'openai/gpt-oss-120b', // this chat used the Groq model, not the default
+    created_at: '2026-11-15T10:00:00Z',
+    updated_at: '2026-11-15T10:01:00Z',
+    messages: [
+      saved('m1', 'user', 'What is osmosis?'),
+      {
+        ...saved('m2', 'assistant', 'Water moving through a membrane.'),
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        mode: 'general',
+        fallback_used: true,
+      },
+    ],
+  }
+
+  function saved(id: string, role: 'user' | 'assistant', content: string) {
+    return {
+      id,
+      role,
+      content,
+      provider: null,
+      model: null,
+      mode: null,
+      fallback_used: false,
+      tokens_in: null,
+      tokens_out: null,
+      created_at: '2026-11-15T10:00:00Z',
+    }
+  }
+
+  function savedChatBackend() {
+    return mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      'GET /api/conversations': { body: [SAVED] },
+      'GET /api/conversations/c9': { body: SAVED },
+      ...chat(reply('Roots take in water by osmosis.', 'c9'), 'c9'),
+    })
+  }
+
+  it('shows the saved messages with their badges', async () => {
+    savedChatBackend()
+    renderApp('/c/c9')
+
+    expect(await within(messages()).findByText('What is osmosis?')).toBeInTheDocument()
+    const answer = within(messages()).getByText('Water moving through a membrane.').closest('li')!
+    expect(await within(answer).findByText('GPT-OSS 120B (Groq)')).toBeInTheDocument()
+    expect(within(answer).getByLabelText('Fallback used: fallback used')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Osmosis in Plant Roots' }),
+    ).toBeInTheDocument()
+  })
+
+  it('Done when: reopen an old chat from the sidebar and continue it with the same model', async () => {
+    const fetch = savedChatBackend()
+    renderApp('/')
+
+    await userEvent.click(await screen.findByRole('link', { name: 'Osmosis in Plant Roots' }))
+    await within(messages()).findByText('What is osmosis?')
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveValue('openai/gpt-oss-120b')
+    await userEvent.type(input(), 'Why does it matter for roots?{Enter}')
+
+    expect(
+      await within(messages()).findByText('Roots take in water by osmosis.'),
+    ).toBeInTheDocument()
+    expect(postedUrls(fetch)).toEqual(['/api/conversations/c9/messages']) // no new chat
+    expect(chatBodies(fetch)).toEqual([
+      {
+        message: 'Why does it matter for roots?',
+        model: 'openai/gpt-oss-120b',
+        allow_fallback: true,
+      },
+    ])
+    expect(within(messages()).getByText('What is osmosis?')).toBeInTheDocument() // history kept
+  })
+
+  it('says so when the chat does not exist (e.g. it was deleted)', async () => {
+    mockApi({ '/api/health': HEALTH }) // GET /api/conversations/gone -> 404
+    renderApp('/c/gone')
+
+    expect(await screen.findByText(/This chat doesn't exist/)).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull()
+  })
+})
+
+describe('A new chat after its first answer (SMA-31)', () => {
+  it("moves to the chat's own address, keeps the toggle, and shows the AI title in the sidebar", async () => {
+    let titled = false
+    const listed = () => [
+      {
+        id: 'c5',
+        title: titled ? "Newton's Second Law" : null,
+        provider: 'gemini',
+        model: 'gemini-3.5-flash',
+        created_at: '2026-11-16T10:00:00Z',
+        updated_at: '2026-11-16T10:00:00Z',
+      },
+    ]
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      'GET /api/conversations': async () => Response.json(titled ? listed() : []),
+      ...chat(reply('F = ma.', 'c5'), 'c5'),
+      'POST /api/conversations/c5/title': async () => {
+        titled = true
+        return Response.json(listed()[0])
+      },
+    })
+    renderApp('/')
+    await screen.findByRole('combobox', { name: 'Model' })
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Use fallback if the model fails' }))
+
+    await userEvent.type(input(), "Explain Newton's second law{Enter}")
+
+    expect(await within(messages()).findByText('F = ma.')).toBeInTheDocument()
+    const link = await screen.findByRole('link', { name: "Newton's Second Law" })
+    expect(link).toHaveAttribute('href', '/c/c5')
+    await waitFor(() => expect(link).toHaveAttribute('aria-current', 'page')) // now on /c/c5
+    expect(
+      screen.getByRole('heading', { level: 1, name: "Newton's Second Law" }),
+    ).toBeInTheDocument()
+    expect(within(messages()).getByText('F = ma.')).toBeInTheDocument() // nothing lost
+    expect(
+      screen.getByRole('checkbox', { name: 'Use fallback if the model fails' }),
+    ).not.toBeChecked()
+    expect(postedUrls(fetch).filter((url) => String(url).endsWith('/title'))).toHaveLength(1)
+  })
+
+  it('does not ask for a title again on later messages', async () => {
+    const fetch = mockApi({ '/api/health': HEALTH, ...chat(reply('OK'), 'conv-1') })
+    renderApp('/')
+
+    await userEvent.type(input(), 'First{Enter}')
+    await within(messages()).findByText('OK')
+    await userEvent.type(input(), 'Second{Enter}')
+    await waitFor(() => expect(chatBodies(fetch)).toHaveLength(2))
+
+    expect(postedUrls(fetch).filter((url) => String(url).endsWith('/title'))).toHaveLength(1)
   })
 })

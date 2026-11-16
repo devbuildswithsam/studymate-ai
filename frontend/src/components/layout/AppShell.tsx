@@ -1,16 +1,29 @@
 // The layout every page shares (wireframe 6.1): sidebar on the left, page in the main area.
-import { NavLink, Outlet } from 'react-router'
+// SMA-31: "New chat" button and "Recent chats" list in the sidebar.
+import { PlusIcon } from 'lucide-react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { HealthStatus } from '@/components/HealthStatus'
 import { NAV_ITEMS } from '@/components/layout/nav'
+import { RecentChats } from '@/components/layout/RecentChats'
+import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
 
 export function AppShell() {
+  const { pathname } = useLocation()
+  const inASavedChat = pathname.startsWith('/c/')
+
   return (
     <div className="flex min-h-svh bg-background text-foreground">
-      <aside className="flex w-60 shrink-0 flex-col border-r bg-muted/40 p-4">
-        <p className="mb-6 px-2 text-lg font-semibold">StudyMate</p>
+      <aside className="sticky top-0 flex h-svh w-64 shrink-0 flex-col border-r bg-muted/40 p-4">
+        <p className="mb-4 px-2 text-lg font-semibold">StudyMate</p>
+        <Button asChild variant="outline" className="mb-4 justify-start">
+          <Link to="/">
+            <PlusIcon aria-hidden />
+            New chat
+          </Link>
+        </Button>
         <nav aria-label="Main" className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => (
             <NavLink
@@ -20,7 +33,8 @@ export function AppShell() {
               className={({ isActive }) =>
                 cn(
                   'rounded-md px-2 py-1.5 text-sm hover:bg-muted',
-                  isActive && 'bg-muted font-medium',
+                  // A saved chat (/c/...) is still the Chat page.
+                  (isActive || (item.to === '/' && inASavedChat)) && 'bg-muted font-medium',
                 )
               }
             >
@@ -28,7 +42,10 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto px-2 pt-4">
+        <div className="mt-6 flex min-h-0 flex-1 flex-col">
+          <RecentChats />
+        </div>
+        <div className="px-2 pt-4">
           <HealthStatus />
         </div>
       </aside>

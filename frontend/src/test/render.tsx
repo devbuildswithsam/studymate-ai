@@ -26,13 +26,16 @@ type FakeRoute = { status?: number; body: unknown } | ((init?: RequestInit) => P
 
 /**
  * Replace fetch with a fake backend: one answer per path, e.g.
- * mockApi({ '/api/chat': { body: {...} }, '/api/health': { body: {...} } }).
+ * mockApi({ '/api/health': { body: {...} }, 'POST /api/conversations': { body: {...} } }).
+ * A key with a method ("POST /api/...") only matches that method and wins over a plain
+ * path (SMA-31: GET and POST /api/conversations do different things).
  * A function route can build its own Response (or reject, like a dead server).
  * Unknown paths answer 404 in our error format.
  */
 export function mockApi(routes: Record<string, FakeRoute>) {
   const fake = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const route = routes[String(input)]
+    const method = init?.method ?? 'GET'
+    const route = routes[`${method} ${String(input)}`] ?? routes[String(input)]
     if (typeof route === 'function') return route(init)
     if (route) return Response.json(route.body, { status: route.status ?? 200 })
     return Response.json({ error: { code: 'not_found', message: 'Not Found' } }, { status: 404 })
