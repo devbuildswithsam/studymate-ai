@@ -528,3 +528,25 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-38 — MCP lab: Streamable HTTP and a deployed echo server
+**Date:** 17 Nov 2026
+
+**What I did**
+- Ran the lab server over HTTP (`server.py --http`) and pointed the same client at it (`client.py --url`).
+- Deployed a one-tool echo server to Vercel and called it from our client and from ChatGPT (my company blocks Claude Desktop connectors).
+
+**What changed and what didn't**
+- **Changed: only the transport.** stdio means the client starts the server and talks through stdin/stdout. HTTP means the server is already running somewhere, and each JSON-RPC message is one `POST` to `/mcp`.
+- **Didn't change:** the tools, their JSON Schemas, the results and the whole JSON-RPC conversation. A test compares stdio and HTTP side by side.
+
+**What I learned**
+- **Stateless HTTP** suits serverless hosts like Vercel: every request stands alone and nothing is remembered in between.
+- **DNS-rebinding protection:** by default the server only accepts `localhost` in the Host header. On Vercel that would have refused everything, so the echo server allows exactly its own Vercel addresses.
+- **A public server needs limits:** allowed hosts only (421), short inputs (500 characters), and no held-open `GET` streams (405). Testing the live server with `curl` found the `GET` problem, which could have used up my free quota.
+- **Any MCP client works with any MCP server.** ChatGPT used my server without any special code: that's the point of a standard protocol.
+
+**What confused me**
+- …
