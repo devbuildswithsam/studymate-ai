@@ -503,3 +503,28 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-37 — MCP lab: independent Python client over stdio
+**Date:** 17 Nov 2026
+
+**What I did**
+- Wrote `mcp_lab/client.py`: it starts the lab server as a subprocess and uses every primitive (tools, the resource, the prompt) with the SDK's `ClientSession`, without the Inspector.
+- It records and prints every JSON-RPC message that goes over the wire.
+
+**What the messages look like**
+- **`initialize`** (client → server, `id: 1`): `{"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "studymate-mcp-lab-client", ...}}`.
+  The reply (also `id: 1`) has the server's name (`serverInfo`), what it offers (`capabilities`: tools, resources, prompts) and its `instructions`.
+- **`notifications/initialized`**: the client says "ready". A *notification* has no `id`, so there's no reply.
+- **`tools/list`** → `{"tools": [{"name": "add_task", "description": "...", "inputSchema": {...JSON Schema...}}, ...]}`: everything the AI will know about each tool.
+- **`tools/call`** → `{"name": "add_task", "arguments": {"title": "...", "due_date": "2026-11-22", "priority": "high"}}`; the reply is `{"content": [text], "structuredContent": {...the task...}, "isError": false}`.
+
+**What I learned**
+- **JSON-RPC:** every request has an `id`, and its response comes back with the same `id`. That's how answers are matched to questions.
+- **The handshake comes first:** the two sides agree on a protocol version and say what they can do, and only then are tools used.
+- **Seeing the wire:** wrapping the read and write streams let me record messages without changing them.
+- **Don't pass secrets to a server you start:** the client gives the server only a minimal environment (PATH, TEMP...), not its API keys.
+
+**What confused me**
+- …
