@@ -6,6 +6,7 @@ import { NAV_ITEMS } from '@/components/layout/nav'
 import { ChatPage } from '@/pages/ChatPage'
 import { NotesPage } from '@/pages/NotesPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { TasksPage } from '@/pages/TasksPage'
 
 /**
  * The chat page: "/" is a new chat, "/c/:conversationId" a saved one (SMA-31).
@@ -27,6 +28,7 @@ function ChatRoute() {
 const PAGES: Record<string, () => React.JSX.Element> = {
   '/': ChatRoute,
   '/notes': NotesPage,
+  '/tasks': TasksPage,
 }
 
 export function AppRoutes() {

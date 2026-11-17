@@ -6,7 +6,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import conversations, health, models, notes
+from app.api import conversations, health, models, notes, tasks
 from app.config import APP_VERSION, get_settings
 from app.errors import register_error_handlers
 from app.services.llm.registry import get_registry
@@ -31,3 +31,4 @@ app.include_router(health.router)
 app.include_router(models.router)
 app.include_router(conversations.router)
 app.include_router(notes.router)
+app.include_router(tasks.router)

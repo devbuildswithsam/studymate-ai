@@ -17,7 +17,7 @@ from app.db.session import make_engine
 from app.models import Conversation, LLMCall, Message, Note, User
 from tests.conftest import alembic_config
 
-APP_TABLES = {"users", "conversations", "messages", "notes", "llm_calls"}
+APP_TABLES = {"users", "conversations", "messages", "notes", "llm_calls", "tasks"}
 
 
 def make_user(session, email="student@example.com") -> User:

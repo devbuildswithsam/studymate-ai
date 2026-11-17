@@ -11,6 +11,7 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > badges showing which model answered). Stage 2: SQLite database with migrations, the local
 > user, **conversations saved in the database** (they survive a restart), a "Recent chats"
 > sidebar with AI titles, and **Notes** (search, edit, "Save as note" on any AI answer).
+> Stage 3 (MCP): the MCP lab (`mcp_lab/`) and a **Tasks** board (To do / Doing / Done).
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -103,8 +104,13 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   `source_message_id` must be an answer from one of your own chats)
 - `GET /api/notes/search?q=...` — notes whose title, content or tags contain `q` (any case)
 - `GET / PATCH / DELETE /api/notes/{id}` — read / edit (send only what changes) / delete
+- `GET / POST /api/tasks` — your tasks, soonest due first (`?status=todo|doing|done`) / create
+  `{"title", "due_date", "priority", "status", "description"}` (only `title` is required)
+- `PATCH / DELETE /api/tasks/{id}` — edit or move between columns (send only what changes;
+  `null` clears the due date or description) / delete. Moving to `done` records `completed_at`.
+  `created_by` is always `user` here: only the AI's MCP tools (SMA-41) create `ai` tasks.
 
-Another user's conversation or note always answers **404**, the same as one that doesn't exist.
+Another user's conversation, note or task always answers **404**, the same as one that doesn't exist.
 
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` treats every request as the local
 user, so it answers **403** to requests from other machines, and the app refuses to start with
@@ -129,7 +135,9 @@ API doesn't lose them. **Recent chats** in the sidebar reopens one (each chat ha
 address, `/c/<id>`, and keeps the model it used); hover a chat to rename or delete it, and
 **New chat** starts an empty one. A new chat gets a short AI title after its first answer.
 The bookmark button under an AI answer saves it to **Notes**, where you can search, edit,
-tag and delete notes; a saved answer links back to its chat.
+tag and delete notes; a saved answer links back to its chat. **Tasks** is a board (To do /
+Doing / Done): add, edit, move, filter by priority and delete tasks; an **AI** marker shows
+tasks the AI created.
 React always calls relative paths like `/api/health`; Vite's dev proxy forwards `/api` to
 `http://127.0.0.1:8000`, so there's no CORS setup and no backend URL in the frontend code.
 
@@ -173,7 +181,8 @@ pre-commit run --all-files
 Frontend (from `frontend\`):
 
 ```bat
-npm test               :: Vitest + Testing Library (fetch is faked: no backend needed)
+npm test               :: Vitest + Testing Library (fetch is faked; runs in New York time so
+                       ::   UTC-vs-local-day bugs show up)
 npm run lint           :: ESLint
 npm run format:check   :: Prettier (npm run format to fix)
 npm run build          :: type-check + production build
@@ -208,7 +217,7 @@ backend/
                        seed.py (the local user)
     models/            tables: users, conversations + messages, notes, llm_calls
     errors.py          one error format: {"error": {"code", "message"}}
-    api/               routers: health.py, models.py, conversations.py (CRUD + chat), notes.py
+    api/               routers: health.py, models.py, conversations.py (CRUD + chat), notes.py, tasks.py
                        (+ deps.py: get_current_user, the only source of user_id)
     repositories/      the only code that queries the database; every lookup takes user_id
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
@@ -222,12 +231,12 @@ frontend/
     App.tsx            routes: every page renders inside the AppShell; "/" new chat,
                        "/c/:id" a saved chat
     api/               client.ts (fetch + our error format), one file per area
-                       (chat.ts, conversations.ts, notes.ts, models.ts, health.ts)
+                       (chat.ts, conversations.ts, notes.ts, tasks.ts, models.ts, health.ts)
     components/        chat/ (MessageList, Markdown, ChatInput, CopyButton), layout/
-                       (AppShell, RecentChats), notes/ (NoteEditor), HealthStatus,
+                       (AppShell, RecentChats), notes/ (NoteEditor), tasks/ (TaskCard), HealthStatus,
                        ui/ (shadcn/ui, generated)
-    lib/               errors.ts (friendly error messages), utils.ts
-    pages/             one component per page (ChatPage, NotesPage; the rest are placeholders)
+    lib/               errors.ts (friendly error messages), dates.ts (due labels), utils.ts
+    pages/             one component per page (ChatPage, NotesPage, TasksPage; the rest are placeholders)
     hooks/             useDebouncedValue (search as you type)
     test/              Vitest setup and render helpers
   vite.config.ts       plugins, @ alias, /api dev proxy, Vitest settings

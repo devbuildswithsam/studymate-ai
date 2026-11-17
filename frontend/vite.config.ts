@@ -23,5 +23,8 @@ export default defineConfig({
     // Vitest: jsdom is a fake browser inside Node, so components render without a real one.
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Tests run in New York time (west of UTC). In India (UTC+5:30) most "UTC instead of
+    // local day" bugs stay hidden; here they show up. SMA-40.
+    env: { TZ: 'America/New_York' },
   },
 })

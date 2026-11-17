@@ -190,7 +190,8 @@ describe('Notes page', () => {
       expect(within(noteList()).queryByRole('link', { name: 'SQL joins cheatsheet' })).toBeNull(),
     )
     expect(requests(fetch, 'DELETE')).toEqual([['/api/notes/n2', undefined]])
-    expect(screen.getByText('Select a note, or create a new one.')).toBeInTheDocument()
+    // findBy: the address changes in a transition, maybe just after the list refreshed.
+    expect(await screen.findByText('Select a note, or create a new one.')).toBeInTheDocument()
   })
 
   it('Cancel keeps the note', async () => {

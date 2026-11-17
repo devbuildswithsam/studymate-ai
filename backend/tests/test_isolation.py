@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import get_current_user
 from app.main import app
-from app.models import Conversation, LLMCall, Message, Note, User
+from app.models import Conversation, LLMCall, Message, Note, Task, User
 from app.services.llm.fake import FakeProvider
 from tests.test_conversations_api import use_fakes
 
@@ -62,7 +62,15 @@ def alices_data(api, two_users) -> dict[str, str]:
             "source_message_id": reply["message_id"],
         },
     ).json()["id"]
-    return {"conversation": conversation_id, "message": reply["message_id"], "note": note_id}
+    task_id = client.post(
+        "/api/tasks", json={"title": "Alice's task", "due_date": "2026-11-20"}
+    ).json()["id"]
+    return {
+        "conversation": conversation_id,
+        "message": reply["message_id"],
+        "note": note_id,
+        "task": task_id,
+    }
 
 
 def fingerprint(db_session) -> dict:
@@ -75,6 +83,9 @@ def fingerprint(db_session) -> dict:
         "messages": db_session.scalar(select(func.count()).select_from(Message)),
         "notes": db_session.execute(select(Note.id, Note.title, Note.content, Note.tags)).all(),
         "llm_calls": db_session.scalar(select(func.count()).select_from(LLMCall)),
+        "tasks": db_session.execute(
+            select(Task.id, Task.title, Task.status, Task.due_date, Task.completed_at)
+        ).all(),
     }
 
 
@@ -90,11 +101,15 @@ ISOLATION_CASES = [
     ("GET", "/api/notes/{note_id}", None),
     ("PATCH", "/api/notes/{note_id}", {"title": "Bob was here", "content": "x"}),
     ("DELETE", "/api/notes/{note_id}", None),
+    ("PATCH", "/api/tasks/{task_id}", {"title": "Bob was here", "status": "done"}),  # SMA-40
+    ("DELETE", "/api/tasks/{task_id}", None),
 ]
 
 
 def fill(path: str, ids: dict[str, str]) -> str:
-    return path.format(conversation_id=ids["conversation"], note_id=ids["note"])
+    return path.format(
+        conversation_id=ids["conversation"], note_id=ids["note"], task_id=ids["task"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -121,7 +136,7 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
 ):
     _, bob = two_users
     client = api(bob)
-    unknown = {"conversation": UNKNOWN_ID, "note": UNKNOWN_ID}
+    unknown = {"conversation": UNKNOWN_ID, "note": UNKNOWN_ID, "task": UNKNOWN_ID}
 
     alices = client.request(method, fill(path, alices_data), json=body)
     missing = client.request(method, fill(path, unknown), json=body)
@@ -156,6 +171,8 @@ def test_b_s_lists_and_search_do_not_show_a_s_items(api, two_users, alices_data)
     assert client.get("/api/notes").json() == []
     assert client.get("/api/notes/search", params={"q": "Alice"}).json() == []
     assert client.get("/api/notes/search", params={"q": "m * a"}).json() == []
+    assert client.get("/api/tasks").json() == []
+    assert client.get("/api/tasks", params={"status": "todo"}).json() == []
 
 
 def test_b_cannot_save_a_note_from_a_s_message(api, two_users, alices_data, db_session):
@@ -193,3 +210,5 @@ def test_a_still_sees_everything_after_b_tried(api, two_users, alices_data):
     assert [m["role"] for m in chat["messages"]] == ["user", "assistant"]
     assert (note["title"], note["content"]) == ("Alice's note", "F = m * a")
     assert note["source"]["message_id"] == alices_data["message"]
+    tasks = client.get("/api/tasks").json()
+    assert [(t["title"], t["status"]) for t in tasks] == [("Alice's task", "todo")]
