@@ -480,3 +480,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-36 — MCP lab: standalone server over stdio (tools, resource, prompt)
+**Date:** 17 Nov 2026
+
+**What I did**
+- Built a small MCP server in `mcp_lab/`, separate from the app: three task tools, a `tasks://summary` resource and a `plan_my_day` prompt, saved in a throwaway `lab.db`.
+- Pinned the MCP SDK to 2.3.0, wrote 13 tests that talk MCP to it, and explored it in MCP Inspector.
+
+**What I learned**
+- **The three MCP primitives:**
+  - a **tool** is something the AI *does* (add a task)
+  - a **resource** is something it *reads* (a summary)
+  - a **prompt** is a ready-made instruction *I* choose (plan my day)
+- **JSON Schema:** my Python type hints and `Field(description=...)` become the tool's schema, which is all the AI knows about a tool. Good descriptions matter.
+- **Check the real version before coding:** MCP 2.x renamed `FastMCP` to `MCPServer`, so most tutorials (1.x) don't run.
+- **Errors for the AI:** `ToolError("No task with id 99…")` reaches the AI so it can fix its mistake; any other exception shows only "Error executing tool".
+- **stdio:** the client starts the server and talks through stdin/stdout, so a `print()` in the server would break the protocol. Logs go to stderr.
+- **Inspector** is an MCP client with a web page: handy for trying a server by hand before writing my own client (next ticket).
+
+**What confused me**
+- …
