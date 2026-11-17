@@ -105,6 +105,29 @@ only its own Vercel hostnames are accepted in the `Host` header (others get **42
 .venv\Scripts\python client.py --url https://<your-echo-project>.vercel.app/mcp --echo "hello"
 ```
 
+## An AI agent that uses the tools (SMA-39)
+`agent.py` is a minimal agent loop: the AI (Gemini or Groq) gets your question and the MCP
+tool list, *asks* for tool calls, we run them through the MCP session and send the results
+back, until it answers without a tool call, or after **5 tool calls** (a stop condition).
+
+```bat
+cd mcp_lab
+.venv\Scripts\python client.py --agent "add a task for tomorrow to revise thermodynamics, and list my tasks"
+.venv\Scripts\python client.py --agent "..." --model openai/gpt-oss-120b      :: Groq: seconds
+```
+
+The model comes from `backend\app\services\llm\models.yaml` (default: the chat default) and
+its API key from `backend\.env`. It calls the real AI (free tier): use public study material.
+Gemini is slow here (minutes): it "thinks" before each tool call.
+
+Things the real AIs taught us (all tested):
+- The AI's message with its tool calls goes back into the history, then one `tool` message per
+  call with the same `tool_call_id`.
+- Gemini may ask for several tools in one turn, and adds a `thought_signature` to each call
+  that must be sent back unchanged (or: 400 "missing a thought_signature").
+- Tool results go to the AI as the structured JSON (`{"result": []}`), not the text parts
+  (an empty list has none). Invalid arguments come back as error text the AI can fix.
+
 ## Run the server on its own
 ```bat
 .venv\Scripts\python server.py

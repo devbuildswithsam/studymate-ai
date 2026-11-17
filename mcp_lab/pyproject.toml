@@ -10,6 +10,10 @@ dependencies = [
     # Pinned exactly. 2.x renamed FastMCP to MCPServer (mcp.server.mcpserver) and changed
     # other APIs: 1.x tutorials don't run on it. Upgrade on purpose, then re-run the tests.
     "mcp==2.3.0",
+    # SMA-39 agent loop: same versions as backend/requirements.txt.
+    "openai==3.50.0",  # Gemini and Groq both speak the OpenAI-compatible API
+    "PyYAML==6.0.3",  # model ids come from backend/app/services/llm/models.yaml
+    "python-dotenv==1.2.4",  # API keys come from backend/.env
 ]
 
 [project.optional-dependencies]
@@ -20,7 +24,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["server", "client"]
+py-modules = ["server", "client", "agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

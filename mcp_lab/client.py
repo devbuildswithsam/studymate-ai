@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+import agent
 import anyio
 from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import get_default_environment, stdio_client
@@ -169,6 +170,33 @@ async def run_http(url: str, transcript: list[WireMessage]) -> DemoResults:
         return await run_session(read, write, transcript)
 
 
+async def run_agent_stdio(params: StdioServerParameters, question: str, llm) -> agent.AgentResult:
+    """Start the lab server and let the AI use its tools to answer `question` (SMA-39)."""
+    async with stdio_client(params) as (read, write):
+        client_info = types.Implementation(name="studymate-mcp-lab-agent", version="0.1.0")
+        async with ClientSession(read, write, client_info=client_info) as session:
+            await session.initialize()
+            return await agent.run_agent(session, llm, question)
+
+
+def make_stdout_safe() -> None:
+    """Print characters the console can't show as '?' instead of crashing.
+
+    AI answers contain e.g. a narrow no-break space (U+202F); Windows' console (cp1252)
+    can't encode it and print() raised UnicodeEncodeError (found in SMA-39).
+    """
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+
+
+def print_agent_result(result: agent.AgentResult) -> None:
+    for number, step in enumerate(result.steps, start=1):
+        status = "ERROR" if step.is_error else "ok"
+        print(f"Tool call {number}: {step.tool} {step.arguments} -> {status}")
+        print(f"    {step.result[:300]}")
+    print(f"\nAnswer: {result.answer}")
+
+
 async def call_echo(url: str, text: str, transcript: list[WireMessage]) -> str:
     """Call the one-tool echo server (vercel_echo/, deployed on Vercel) over HTTP."""
     async with streamable_http_client(url) as (read, write):
@@ -201,9 +229,18 @@ def main(argv: list[str] | None = None) -> None:
     where.add_argument("--db", type=Path, help="stdio: lab database file (default: lab.db)")
     where.add_argument("--url", help="HTTP: a running server, e.g. http://127.0.0.1:8765/mcp")
     parser.add_argument("--echo", metavar="TEXT", help="with --url: call the echo server's tool")
+    parser.add_argument("--agent", metavar="QUESTION", help="let the AI use the tools (stdio)")
+    parser.add_argument("--model", help="with --agent: a model id from models.yaml")
     args = parser.parse_args(argv)
+    make_stdout_safe()
     if args.echo and not args.url:
         parser.error("--echo needs --url (the echo server runs over HTTP)")
+    if args.agent:
+        if args.url:
+            parser.error("--agent runs the lab server over stdio: use --db, not --url")
+        llm = agent.llm_from_registry(args.model)
+        print_agent_result(anyio.run(run_agent_stdio, server_params(args.db), args.agent, llm))
+        return
 
     transcript: list[WireMessage] = []
     if args.echo:
