@@ -76,6 +76,35 @@ cd mcp_lab
 Every request has an `id`; its response carries the same `id`. The server only gets a
 minimal environment (`get_default_environment()`), never the client's API keys.
 
+## The same server over Streamable HTTP (SMA-38)
+Over HTTP the server is a small web server; every JSON-RPC message is one `POST` to `/mcp`
+(answers come back as a server-sent event: `event: message` / `data: {...}`).
+Only the transport changes: the tools, schemas, results and messages are the same (a test checks).
+
+```bat
+:: window 1: the server, http://127.0.0.1:8765/mcp (stateless; 127.0.0.1 only)
+.venv\Scripts\python server.py --http
+
+:: window 2: the same client, pointed at the URL
+.venv\Scripts\python client.py --url http://127.0.0.1:8765/mcp
+```
+
+Port 8765, not 8000: 8000 is the app's backend. Stop the server with **Ctrl+C**.
+
+## A deployed echo server (`vercel_echo/`)
+One tool, `echo`, no data: a test that MCP over HTTP works on Vercel. Answers are plain
+JSON (`json_response=True`), nothing is kept between requests (`stateless_http=True`), and
+only its own Vercel hostnames are accepted in the `Host` header (others get **421**).
+
+```bat
+:: locally (from mcp_lab\)
+.venv\Scripts\python -m uvicorn vercel_echo.main:app --port 8766
+.venv\Scripts\python client.py --url http://127.0.0.1:8766/mcp --echo "hello"
+
+:: deployed: Vercel project with Root Directory mcp_lab/vercel_echo
+.venv\Scripts\python client.py --url https://<your-echo-project>.vercel.app/mcp --echo "hello"
+```
+
 ## Run the server on its own
 ```bat
 .venv\Scripts\python server.py

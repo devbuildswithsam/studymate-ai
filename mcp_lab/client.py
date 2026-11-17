@@ -1,4 +1,4 @@
-"""MCP lab client (Stage 3a, SMA-37): drives server.py over stdio and shows the raw JSON-RPC.
+"""MCP lab client (Stage 3a, SMA-37/38): drives the lab server and shows the raw JSON-RPC.
 
 It starts the server as a subprocess, then talks to it through the SDK's ClientSession:
 initialize, list_tools, call_tool, list/read a resource, list/get a prompt. Every message
@@ -7,6 +7,7 @@ that crosses the wire is recorded and printed, so you see the protocol itself.
 From mcp_lab/ with its venv:
     .venv\\Scripts\\python client.py              (uses lab.db next to server.py)
     .venv\\Scripts\\python client.py --db C:\\...\\demo.db
+    .venv\\Scripts\\python client.py --url http://127.0.0.1:8765/mcp   (server.py --http)
 """
 
 import argparse
@@ -19,6 +20,7 @@ from typing import Any, Literal
 import anyio
 from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import get_default_environment, stdio_client
+from mcp.client.streamable_http import streamable_http_client
 
 HERE = Path(__file__).resolve().parent
 
@@ -144,15 +146,40 @@ async def demo(session: ClientSession) -> DemoResults:
     return results
 
 
+async def run_session(read, write, transcript: list[WireMessage]) -> DemoResults:
+    """The same session and demo for every transport: only (read, write) differ."""
+    client_info = types.Implementation(name="studymate-mcp-lab-client", version="0.1.0")
+    session = ClientSession(
+        TapRead(read, transcript), TapWrite(write, transcript), client_info=client_info
+    )
+    async with session:
+        return await demo(session)
+
+
 async def run_stdio(params: StdioServerParameters, transcript: list[WireMessage]) -> DemoResults:
     """Start the server as a subprocess and run the demo over its stdin/stdout."""
     async with stdio_client(params) as (read, write):
+        return await run_session(read, write, transcript)
+
+
+async def run_http(url: str, transcript: list[WireMessage]) -> DemoResults:
+    """Run the demo against a server that is already running at `url` (SMA-38).
+    Each JSON-RPC message becomes an HTTP POST to that URL."""
+    async with streamable_http_client(url) as (read, write):
+        return await run_session(read, write, transcript)
+
+
+async def call_echo(url: str, text: str, transcript: list[WireMessage]) -> str:
+    """Call the one-tool echo server (vercel_echo/, deployed on Vercel) over HTTP."""
+    async with streamable_http_client(url) as (read, write):
         client_info = types.Implementation(name="studymate-mcp-lab-client", version="0.1.0")
         session = ClientSession(
             TapRead(read, transcript), TapWrite(write, transcript), client_info=client_info
         )
         async with session:
-            return await demo(session)
+            await session.initialize()
+            await session.list_tools()
+            return tool_data(await session.call_tool("echo", {"text": text}))["result"]
 
 
 # --- Printing -------------------------------------------------------------------------
@@ -170,15 +197,28 @@ def describe(wire: WireMessage) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Drive the MCP lab server and show the wire.")
-    parser.add_argument("--db", type=Path, help="lab database file (default: lab.db)")
+    where = parser.add_mutually_exclusive_group()
+    where.add_argument("--db", type=Path, help="stdio: lab database file (default: lab.db)")
+    where.add_argument("--url", help="HTTP: a running server, e.g. http://127.0.0.1:8765/mcp")
+    parser.add_argument("--echo", metavar="TEXT", help="with --url: call the echo server's tool")
     args = parser.parse_args(argv)
+    if args.echo and not args.url:
+        parser.error("--echo needs --url (the echo server runs over HTTP)")
 
     transcript: list[WireMessage] = []
-    results = anyio.run(run_stdio, server_params(args.db), transcript)
+    if args.echo:
+        reply = anyio.run(call_echo, args.url, args.echo, transcript)
+    elif args.url:
+        results = anyio.run(run_http, args.url, transcript)
+    else:
+        results = anyio.run(run_stdio, server_params(args.db), transcript)
 
     for wire in transcript:
         print(f"\n{describe(wire)}")
         print(json.dumps(wire.message, indent=2, ensure_ascii=False))
+    if args.echo:
+        print(f"\nEcho replied: {reply}")
+        return
     print(
         f"\nEvery primitive worked: {len(results.tool_names)} tools, "
         f"{len(results.pending)} pending task(s), resource and prompt read."

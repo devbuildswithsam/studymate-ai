@@ -6,6 +6,8 @@
 
 Run over stdio (the client starts this file and talks to it through stdin/stdout):
     .venv\\Scripts\\python server.py
+or over Streamable HTTP (SMA-38), at http://127.0.0.1:8765/mcp:
+    .venv\\Scripts\\python server.py --http
 
 Over stdio, stdout IS the protocol channel: never print() here, or the JSON-RPC messages
 get corrupted. Logs go to stderr.
@@ -13,6 +15,7 @@ get corrupted. Logs go to stderr.
 Uses mcp 2.x, where FastMCP is called MCPServer.
 """
 
+import argparse
 import os
 import sqlite3
 from contextlib import closing
@@ -188,5 +191,19 @@ def plan_my_day(hours_available: int = 3) -> str:
     )
 
 
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="The MCP lab server.")
+    parser.add_argument("--http", action="store_true", help="Streamable HTTP instead of stdio")
+    # Not 8000: that's the app's backend, and both may run at once.
+    parser.add_argument("--port", type=int, default=8765, help="HTTP port (default 8765)")
+    args = parser.parse_args(argv)
+    if args.http:
+        # stateless_http: every POST stands alone, no session kept in memory (what a
+        # serverless host like Vercel needs). 127.0.0.1 only: the lab has no login.
+        mcp.run(transport="streamable-http", host="127.0.0.1", port=args.port, stateless_http=True)
+    else:
+        mcp.run()  # stdio
+
+
 if __name__ == "__main__":
-    mcp.run()  # stdio by default
+    main()
