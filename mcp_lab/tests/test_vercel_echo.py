@@ -167,3 +167,17 @@ def test_main_echo_mode_prints_the_reply(echo_url, capsys):
     out = capsys.readouterr().out
     assert "-> #3 tools/call" in out
     assert "Echo replied: hi" in out
+
+
+def test_get_is_refused_at_once_instead_of_held_open(monkeypatch):
+    # In Streamable HTTP a GET opens a server-to-client event stream. This stateless echo
+    # server never sends one, and on Vercel an open GET keeps a function running (and
+    # uses the free quota). So: 405 immediately.
+    echo = load_echo(monkeypatch)
+    with TestClient(echo.app) as http:
+        response = http.get(
+            "/mcp", headers={"Accept": "text/event-stream", "Host": "127.0.0.1:8000"}
+        )
+
+    assert response.status_code == 405
+    assert response.headers["allow"] == "POST"
