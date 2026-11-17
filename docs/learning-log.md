@@ -550,3 +550,27 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-39 — MCP lab: minimal AI agent loop
+**Date:** 17 Nov 2026
+
+**What I did**
+- Built `mcp_lab/agent.py`: the AI gets my question and the MCP tools, asks for tool calls, my code runs them through MCP and sends the results back, until the AI gives a final answer.
+- `client.py --agent "add a task for tomorrow and list my tasks"` works from the terminal with Groq (6 s) and Gemini (222 s).
+
+**What I learned**
+- **Function calling:** the AI never runs anything itself. It replies "please call `add_task` with `{...}`", my code runs it and sends back the result with the same call id, and the AI continues.
+- **Stop conditions:** stop at a final answer, or after 5 tool calls. When I removed the limit in a test, the test ran forever. That's why it's there.
+- **The AI makes mistakes:** wrong arguments or broken JSON go back to it as error messages so it can try again, instead of crashing my program.
+- **The AI needs context it can't guess:** I put today's date in the system prompt, so it can work out "tomorrow".
+- **Real models have quirks a fake one doesn't:**
+  - Gemini asks for several tools at once.
+  - Gemini attaches a secret "thought signature" to each tool call that must be sent back unchanged, or it answers 400.
+  - Gemini is much slower with tools (minutes vs seconds on Groq).
+  - Test with the real thing before calling it done.
+- **Empty isn't nothing:** an empty task list has no text at all, so I send the AI the structured JSON (`{"result": []}`) instead.
+
+**What confused me**
+- …
