@@ -574,3 +574,23 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-40 — Tasks: table, API and Tasks board
+**Date:** 17 Nov 2026
+
+**What I did**
+- Added a `tasks` table (with a migration), an API, and a Tasks board with To do / Doing / Done columns: create, move, edit, filter and delete tasks by hand.
+- Extended the two-user isolation tests to tasks: the guard test made me do it.
+
+**What I learned**
+- **Some values must come from the server, never the request:** like `user_id`, the "created by the AI" marker can't be sent by the browser. Only the AI's tools will set it.
+- **PATCH: "not sent" is different from "sent as null".** Leaving out the due date keeps it; sending `null` clears it.
+- **Rules belong in the repository** (moving to Done records the time) so the API and the AI's tools follow the same rules.
+- **Time zones:** `new Date("2026-11-20")` means midnight *UTC*. In India that still looks right, so the bug hides; in New York a Friday task would say "Due Thu". The frontend tests now run in New York time to catch this kind of bug.
+- **Flaky tests:** a test that failed 1 time in 3 was checking the page before a navigation had finished. Waiting for the result (`findBy...`) fixed it.
+- **Reading a migration:** for a new table, Alembic does include the CHECK rules (it only misses them when changing an existing table).
+
+**What confused me**
+- …
