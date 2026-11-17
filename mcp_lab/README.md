@@ -51,6 +51,31 @@ It opens the Inspector in your browser (the URL includes a session token). Then:
 
 Stop it with **Ctrl+C** in the terminal.
 
+## Our own client: see the raw JSON-RPC (SMA-37)
+`client.py` is an MCP client that doesn't need the Inspector. It starts `server.py` as a
+subprocess and talks to it over stdio with the SDK's `ClientSession`: `initialize`,
+`tools/list`, `tools/call` (add_task, list_tasks), `resources/list` + `resources/read`,
+`prompts/list` + `prompts/get`. It records **every message on the wire** (by wrapping the
+read and write streams) and prints them:
+
+```bat
+cd mcp_lab
+.venv\Scripts\python client.py                 :: uses lab.db
+.venv\Scripts\python client.py --db %TEMP%\demo.db
+```
+
+```text
+-> #1 initialize                 the client says hello: protocol version, its name, capabilities
+<- #1 result                     the server answers: its name, what it offers (tools, resources, prompts)
+-> notifications/initialized     "ready" (a notification: no id, no reply)
+-> #2 tools/list   /  <- #2 result     every tool with its JSON Schema
+-> #3 tools/call   /  <- #3 result     {"name": "add_task", "arguments": {...}} -> the new task
+...
+```
+
+Every request has an `id`; its response carries the same `id`. The server only gets a
+minimal environment (`get_default_environment()`), never the client's API keys.
+
 ## Run the server on its own
 ```bat
 .venv\Scripts\python server.py
