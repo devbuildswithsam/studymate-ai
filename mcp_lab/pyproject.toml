@@ -1,0 +1,27 @@
+# Stage 3a MCP lab (SMA-36): a standalone MCP server, separate from the app.
+# It has its own venv (mcp_lab\.venv) and its own tests; the app's pytest doesn't run them.
+
+[project]
+name = "studymate-mcp-lab"
+version = "0.1.0"
+description = "MCP lab: tools, a resource and a prompt over stdio"
+requires-python = ">=3.12"
+dependencies = [
+    # Pinned exactly. 2.x renamed FastMCP to MCPServer (mcp.server.mcpserver) and changed
+    # other APIs: 1.x tutorials don't run on it. Upgrade on purpose, then re-run the tests.
+    "mcp==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.2.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -235,6 +235,7 @@ docs/
   adr/                 architecture decision records: why things are the way they are
   learning-log.md      what I did and learned, per ticket
 experiments/           throwaway proofs of concept (Vercel streaming PoC, Turso spike: ADR-0006)
+mcp_lab/               Stage 3a MCP lab: a standalone MCP server (own venv and tests, see its README)
 pyproject.toml         ruff, black and pytest settings
 ```
 
