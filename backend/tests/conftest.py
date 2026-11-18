@@ -10,6 +10,10 @@ from app.config import BACKEND_DIR, Settings, get_settings
 from app.db.seed import ensure_local_user
 from app.db.session import make_engine
 from app.main import app
+from app.services.llm.fake import FakeProvider
+from app.services.llm.fallback import FallbackManager, get_fallback_manager
+from app.services.llm.registry import get_registry
+from tests.tool_helpers import REGISTRY as TOOL_REGISTRY
 
 
 def alembic_config(database_url: str) -> Config:
@@ -56,3 +60,32 @@ def client(db_url, db_session):
     with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+# --- Chat with MCP tools (SMA-42, SMA-43) ------------------------------------------
+
+
+@pytest.fixture
+def tool_fakes():
+    """The fake AIs behind TOOL_REGISTRY's two models: set .replies in a test."""
+    return {
+        "tools-model": FakeProvider(replies=["plain answer"]),
+        "plain-model": FakeProvider(replies=["answer without tools"]),
+    }
+
+
+@pytest.fixture
+def tool_chat(client, tool_fakes):
+    """send(message) in a new chat, answered by tool_fakes: (conversation_id, response)."""
+    manager = FallbackManager(TOOL_REGISTRY, lambda m: tool_fakes[m.id])
+    app.dependency_overrides[get_registry] = lambda: TOOL_REGISTRY
+    app.dependency_overrides[get_fallback_manager] = lambda: manager
+
+    def send(message: str, **extra):
+        conversation_id = client.post("/api/conversations", json={}).json()["id"]
+        response = client.post(
+            f"/api/conversations/{conversation_id}/messages", json={"message": message, **extra}
+        )
+        return conversation_id, response
+
+    return send

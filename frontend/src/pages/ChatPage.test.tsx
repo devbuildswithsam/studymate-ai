@@ -718,3 +718,132 @@ describe('Answers that used tools (SMA-42)', () => {
     expect(await screen.findByText('Finish thermodynamics notes')).toBeInTheDocument()
   })
 })
+
+describe('Confirmation cards and Undo (SMA-43)', () => {
+  const PENDING = {
+    id: 'act1',
+    tool: 'complete_task',
+    kind: 'change',
+    status: 'pending',
+    summary: "Mark 'Revise ch.3' as done",
+    error: null,
+  }
+  const CREATED = {
+    id: 'act2',
+    tool: 'create_task',
+    kind: 'create',
+    status: 'done',
+    summary: "Add task 'Essay'",
+    error: null,
+  }
+
+  function answerWith(actions: object[]) {
+    const answer = reply('Please confirm it below.')
+    return { body: { ...answer.body, mode: 'tool', tool_calls: [], actions } }
+  }
+
+  it('Done when: confirming a card runs it and shows it as done', async () => {
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      ...chat(answerWith([PENDING])),
+      'POST /api/actions/act1/confirm': { body: { ...PENDING, status: 'done' } },
+    })
+    renderApp('/')
+
+    await userEvent.type(input(), 'Complete my Revise ch.3 task{Enter}')
+    const card = await screen.findByRole('listitem', { name: PENDING.summary })
+    expect(card).toHaveTextContent("Mark 'Revise ch.3' as done?")
+    await userEvent.click(within(card).getByRole('button', { name: 'Confirm' }))
+
+    expect(await screen.findByText("Done: Mark 'Revise ch.3' as done")).toBeInTheDocument()
+    expect(postedUrls(fetch)).toContain('/api/actions/act1/confirm')
+    expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
+  })
+
+  it('cancels a card', async () => {
+    mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      ...chat(answerWith([PENDING])),
+      'POST /api/actions/act1/cancel': { body: { ...PENDING, status: 'cancelled' } },
+    })
+    renderApp('/')
+
+    await userEvent.type(input(), 'Complete my Revise ch.3 task{Enter}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText("Cancelled: Mark 'Revise ch.3' as done")).toBeInTheDocument()
+  })
+
+  it('undoes a task the AI created', async () => {
+    const fetch = mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      ...chat(answerWith([CREATED])),
+      'POST /api/actions/act2/undo': { body: { ...CREATED, status: 'undone' } },
+    })
+    renderApp('/')
+
+    await userEvent.type(input(), 'Add a task: essay{Enter}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+
+    expect(await screen.findByText("Undone: Add task 'Essay'")).toBeInTheDocument()
+    expect(postedUrls(fetch)).toContain('/api/actions/act2/undo')
+  })
+
+  it('shows the error and keeps the card when a click fails', async () => {
+    mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      ...chat(answerWith([PENDING])),
+      'POST /api/actions/act1/confirm': {
+        status: 409,
+        body: { error: { code: 'conflict', message: 'This action is already cancelled.' } },
+      },
+    })
+    renderApp('/')
+
+    await userEvent.type(input(), 'Complete my Revise ch.3 task{Enter}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm' }))
+
+    expect(await screen.findByText('This action is already cancelled.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled() // try again
+  })
+
+  it('shows the cards again when the chat is reopened', async () => {
+    const savedChat = {
+      id: 'c8',
+      title: 'Revision',
+      provider: 'groq',
+      model: 'openai/gpt-oss-120b',
+      created_at: '2026-11-18T09:00:00Z',
+      updated_at: '2026-11-18T09:00:00Z',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Please confirm.',
+          provider: 'groq',
+          model: 'openai/gpt-oss-120b',
+          mode: 'tool',
+          fallback_used: false,
+          tokens_in: 1,
+          tokens_out: 1,
+          tool_calls: [],
+          actions: [PENDING],
+          created_at: '2026-11-18T09:00:00Z',
+        },
+      ],
+    }
+    mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      'GET /api/conversations': { body: [savedChat] },
+      'GET /api/conversations/c8': { body: savedChat },
+    })
+    renderApp('/c/c8')
+
+    expect(await screen.findByRole('button', { name: 'Confirm' })).toBeInTheDocument()
+  })
+})

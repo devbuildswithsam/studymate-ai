@@ -4,6 +4,9 @@ The model never runs anything itself: it *asks* for a tool call. We run it throu
 app's MCP server (an in-memory MCP session acting for the signed-in user, SMA-41), send
 the result back, and repeat until the model answers without asking for a tool, or after
 MAX_TOOL_CALLS calls.
+
+SMA-43: before running a write, the write-action policy (tool_policy.py) decides. A held
+call is NOT run: it becomes a confirmation card, and the model is told it is waiting.
 """
 
 import functools
@@ -17,12 +20,19 @@ from mcp import Client
 from mcp.shared.exceptions import MCPError
 
 from app.mcp_server.context import ToolContext, acting_as
-from app.mcp_server.server import mcp_server
+from app.mcp_server.server import TOOL_KINDS, mcp_server
 from app.services.llm.base import ChatOptions, ChatResponse, Message, ToolCall
 from app.services.llm.exceptions import AllModelsFailedError
 from app.services.llm.fallback import Attempt, ChatResult, FallbackManager
+from app.services.tool_policy import decide
 
 MAX_TOOL_CALLS = 5  # per user message (guide 7.2): never let a model loop forever
+
+# What the model is told about a held call. It must not retry or claim it's done.
+HELD_RESULT = (
+    "Not done yet: this needs the student's confirmation. The app shows it to them as a "
+    "card with Confirm and Cancel buttons. Tell them to confirm it there; don't call it again."
+)
 
 
 @dataclass
@@ -34,6 +44,7 @@ class ToolStep:
     result: str  # what the model was sent back
     is_error: bool
     duration_ms: int
+    held: bool = False  # SMA-43: not run, waiting for the student's Confirm click
 
 
 @dataclass
@@ -71,8 +82,11 @@ async def run_agent(
     allow_fallback: bool,
     options: ChatOptions,
     max_tool_calls: int = MAX_TOOL_CALLS,
+    user_asked_to_act: bool = False,  # SMA-43: from the student's own message only
 ) -> AgentRun:
-    tools = to_openai_tools((await session.list_tools()).tools)
+    mcp_tools = (await session.list_tools()).tools
+    schemas = {t.name: t.input_schema for t in mcp_tools}
+    tools = to_openai_tools(mcp_tools)
     options = ChatOptions(**{**options.__dict__, "tools": tools})
     messages = list(messages)  # we append to it: never change the caller's list
     steps: list[ToolStep] = []
@@ -137,13 +151,16 @@ async def run_agent(
                 )
                 run.stopped_early = True
                 return run
-            step = await run_tool(session, tool_call)
+            step = await run_tool(session, tool_call, schemas, user_asked_to_act)
             steps.append(step)
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": step.result})
 
 
-async def run_tool(session, tool_call: ToolCall) -> ToolStep:
-    """Run one call through MCP. Mistakes become error text for the model, never crashes."""
+async def run_tool(
+    session, tool_call: ToolCall, schemas: dict[str, dict], user_asked_to_act: bool
+) -> ToolStep:
+    """Run one call through MCP, if the policy allows it. Mistakes become error text for
+    the model, never crashes."""
     started = time.perf_counter()
 
     def step(result: str, is_error: bool) -> ToolStep:
@@ -156,6 +173,15 @@ async def run_tool(session, tool_call: ToolCall) -> ToolStep:
         return step(f"Error: the arguments were not valid JSON: {tool_call.arguments!r}", True)
     if not isinstance(arguments, dict):
         return step('Error: the arguments must be a JSON object, like {"title": "..."}', True)
+    if tool_call.name in TOOL_KINDS:
+        # Checked BEFORE holding: a card must never carry an argument like user_id.
+        unknown = sorted(set(arguments) - set(schemas[tool_call.name].get("properties", {})))
+        if unknown:
+            return step(f"Error: unknown argument(s) for {tool_call.name}: {unknown}", True)
+        if decide(TOOL_KINDS[tool_call.name], user_asked_to_act) == "hold":
+            held = step(HELD_RESULT, False)
+            held.held = True
+            return held
     try:
         result = await session.call_tool(tool_call.name, arguments)
     except MCPError as e:  # e.g. an injected user_id (RejectUnknownArguments, SMA-41)
@@ -174,6 +200,7 @@ async def run_agent_for_user(
     model_id: str | None,
     allow_fallback: bool,
     options: ChatOptions,
+    user_asked_to_act: bool = False,
 ) -> AgentRun:
     """Run the loop with the app's own MCP tools, acting for this user (SMA-41 context).
 
@@ -186,7 +213,13 @@ async def run_agent_for_user(
         async with Client(mcp_server) as session:
             try:
                 return await run_agent(
-                    manager, session, messages, model_id, allow_fallback, options
+                    manager,
+                    session,
+                    messages,
+                    model_id,
+                    allow_fallback,
+                    options,
+                    user_asked_to_act=user_asked_to_act,
                 )
             except Exception as e:
                 failure = e

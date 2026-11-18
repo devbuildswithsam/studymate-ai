@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import get_current_user
 from app.main import app
-from app.models import Conversation, LLMCall, Message, Note, Task, User
+from app.models import AgentAction, Conversation, LLMCall, Message, Note, Task, User
 from app.services.llm.fake import FakeProvider
 from tests.test_conversations_api import use_fakes
 
@@ -45,8 +45,9 @@ def api(client, two_users):
 
 
 @pytest.fixture
-def alices_data(api, two_users) -> dict[str, str]:
-    """Alice's chat (with a title and messages) and a note saved from its answer."""
+def alices_data(api, two_users, db_session) -> dict[str, str]:
+    """Alice's chat (with a title and messages), a note saved from its answer, a task, and
+    a pending AI action (a confirmation card) under the answer."""
     alice, _ = two_users
     client = api(alice)
     conversation_id = client.post("/api/conversations", json={}).json()["id"]
@@ -65,11 +66,23 @@ def alices_data(api, two_users) -> dict[str, str]:
     task_id = client.post(
         "/api/tasks", json={"title": "Alice's task", "due_date": "2026-11-20"}
     ).json()["id"]
+    card = AgentAction(
+        user_id=alice.id,
+        message_id=reply["message_id"],
+        position=1,
+        tool="complete_task",
+        kind="change",
+        arguments={"task_id": task_id},
+        summary="Mark 'Alice's task' as done",
+    )
+    db_session.add(card)
+    db_session.commit()
     return {
         "conversation": conversation_id,
         "message": reply["message_id"],
         "note": note_id,
         "task": task_id,
+        "action": card.id,
     }
 
 
@@ -86,6 +99,7 @@ def fingerprint(db_session) -> dict:
         "tasks": db_session.execute(
             select(Task.id, Task.title, Task.status, Task.due_date, Task.completed_at)
         ).all(),
+        "actions": db_session.execute(select(AgentAction.id, AgentAction.status)).all(),
     }
 
 
@@ -103,12 +117,18 @@ ISOLATION_CASES = [
     ("DELETE", "/api/notes/{note_id}", None),
     ("PATCH", "/api/tasks/{task_id}", {"title": "Bob was here", "status": "done"}),  # SMA-40
     ("DELETE", "/api/tasks/{task_id}", None),
+    ("POST", "/api/actions/{action_id}/confirm", None),  # SMA-43
+    ("POST", "/api/actions/{action_id}/cancel", None),
+    ("POST", "/api/actions/{action_id}/undo", None),
 ]
 
 
 def fill(path: str, ids: dict[str, str]) -> str:
     return path.format(
-        conversation_id=ids["conversation"], note_id=ids["note"], task_id=ids["task"]
+        conversation_id=ids["conversation"],
+        note_id=ids["note"],
+        task_id=ids["task"],
+        action_id=ids["action"],
     )
 
 
@@ -136,7 +156,12 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
 ):
     _, bob = two_users
     client = api(bob)
-    unknown = {"conversation": UNKNOWN_ID, "note": UNKNOWN_ID, "task": UNKNOWN_ID}
+    unknown = {
+        "conversation": UNKNOWN_ID,
+        "note": UNKNOWN_ID,
+        "task": UNKNOWN_ID,
+        "action": UNKNOWN_ID,
+    }
 
     alices = client.request(method, fill(path, alices_data), json=body)
     missing = client.request(method, fill(path, unknown), json=body)

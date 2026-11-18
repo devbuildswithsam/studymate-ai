@@ -1,4 +1,6 @@
 // The conversation: user bubbles on the right, AI answers on the left. SMA-25.
+import type { ActionVerb, AgentAction } from '@/api/actions'
+import { ActionCards } from '@/components/chat/ActionCards'
 import { CopyButton } from '@/components/chat/CopyButton'
 import { Markdown } from '@/components/chat/Markdown'
 import { MessageBadges } from '@/components/chat/MessageBadges'
@@ -12,9 +14,11 @@ type Props = {
   isThinking?: boolean // waiting for the AI's answer
   // Shows "Save as note" on AI answers (SMA-32). Gets the answer and the question before it.
   onSaveAsNote?: (answer: ChatMessage, question: string | undefined) => Promise<unknown>
+  // Confirm / Cancel / Undo on the AI's actions (SMA-43).
+  onAction?: (action: AgentAction, verb: ActionVerb) => Promise<unknown>
 }
 
-export function MessageList({ messages, isThinking = false, onSaveAsNote }: Props) {
+export function MessageList({ messages, isThinking = false, onSaveAsNote, onAction }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <ol aria-label="Messages" className="flex flex-col gap-4">
@@ -39,6 +43,9 @@ export function MessageList({ messages, isThinking = false, onSaveAsNote }: Prop
                     <Markdown>{message.content}</Markdown>
                     {message.meta?.toolCalls?.length ? (
                       <ToolCalls calls={message.meta.toolCalls} />
+                    ) : null}
+                    {message.meta?.actions?.length && onAction ? (
+                      <ActionCards actions={message.meta.actions} onAction={onAction} />
                     ) : null}
                     <div className="mt-2 flex items-center justify-between gap-2">
                       {message.meta ? <MessageBadges meta={message.meta} /> : <span />}

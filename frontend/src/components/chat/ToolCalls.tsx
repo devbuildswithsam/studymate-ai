@@ -17,7 +17,11 @@ export function ToolCalls({ calls }: { calls: ToolCallOut[] }) {
     <ul aria-label="Tools used" className="mt-2 space-y-0.5 text-xs text-muted-foreground">
       {calls.map((call, index) => {
         // A failed call shows the tool's error: the AI saw the same text and could retry.
-        const detail = call.is_error ? `failed: ${call.result}` : describeArguments(call.arguments)
+        const detail = call.is_error
+          ? `failed: ${call.result}`
+          : call.held // SMA-43: not run yet, see the card below
+            ? 'waiting for your confirmation'
+            : describeArguments(call.arguments)
         return (
           <li
             key={index}

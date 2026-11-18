@@ -17,6 +17,7 @@ from app.services.llm.exceptions import AllModelsFailedError, ProviderTimeoutErr
 from app.services.llm.fake import FakeProvider
 from app.services.llm.fallback import FallbackManager
 from app.services.llm.registry import ModelRegistry
+from app.services.tool_policy import asks_to_act
 
 REGISTRY = ModelRegistry.model_validate(
     {
@@ -80,8 +81,11 @@ def start(question: str = QUESTION) -> list[dict]:
 
 
 async def run(context, manager, messages=None):
+    messages = messages or start()
+    # SMA-43: like the chat route, only the student's own (last) message can ask to act.
+    asked = asks_to_act(messages[-1]["content"])
     return await run_agent_for_user(
-        context, manager, messages or start(), "main", True, ChatOptions()
+        context, manager, messages, "main", True, ChatOptions(), user_asked_to_act=asked
     )
 
 
@@ -309,3 +313,70 @@ async def test_if_the_answering_model_fails_mid_loop_it_does_not_switch_provider
         await run(tools_session, manager_for(main, backup))
 
     assert len(main.calls) == 1  # main was not asked again mid-loop
+
+
+# --- Write-action policy (SMA-43) ----------------------------------------------------------
+
+
+@pytest.fixture
+def a_task(db_session, user) -> Task:
+    task = Task(user_id=user.id, title="Revise ch.3")
+    db_session.add(task)
+    db_session.commit()
+    return task
+
+
+@pytest.mark.anyio
+async def test_a_change_is_held_even_when_the_student_asks_for_it(
+    tools_session, db_session, a_task
+):
+    main = FakeProvider(replies=[[call("complete_task", {"task_id": a_task.id})], "Confirm it?"])
+
+    run_ = await run(tools_session, manager_for(main), start("Please complete my Revise ch.3 task"))
+
+    step = run_.steps[0]
+    assert (step.held, step.is_error) == (True, False)
+    db_session.refresh(a_task)
+    assert a_task.status == "todo"  # nothing changed: it waits for the Confirm click
+    told = main.calls[1][-1]["content"]  # the model is told it is NOT done, and why
+    assert told.startswith("Not done yet") and "needs the student's confirmation" in told
+
+
+@pytest.mark.anyio
+async def test_a_create_the_student_did_not_ask_for_is_held(tools_session, db_session):
+    main = FakeProvider(replies=[[call("create_task", {"title": "Read about entropy"})], "Ok."])
+
+    run_ = await run(tools_session, manager_for(main), start("What is entropy?"))
+
+    assert run_.steps[0].held is True
+    assert db_session.query(Task).count() == 0
+
+
+@pytest.mark.anyio
+async def test_a_create_the_student_asked_for_runs(tools_session, db_session):
+    main = FakeProvider(replies=[[call("create_task", {"title": "Essay"})], "Added."])
+
+    run_ = await run(tools_session, manager_for(main), start("Add a task: essay"))
+
+    assert run_.steps[0].held is False
+    assert db_session.query(Task).count() == 1
+
+
+@pytest.mark.anyio
+async def test_reads_always_run(tools_session):
+    main = FakeProvider(replies=[[call("list_tasks", {})], "Nothing."])
+
+    run_ = await run(tools_session, manager_for(main), start("What is entropy?"))
+
+    assert (run_.steps[0].held, run_.steps[0].result) == (False, '{"result": []}')
+
+
+@pytest.mark.anyio
+async def test_a_held_call_with_an_unknown_argument_is_an_error_not_a_card(tools_session, a_task):
+    bad = call("complete_task", {"task_id": a_task.id, "user_id": "someone-else"})
+    main = FakeProvider(replies=[[bad], "Sorry."])
+
+    run_ = await run(tools_session, manager_for(main), start("complete my task"))
+
+    assert (run_.steps[0].held, run_.steps[0].is_error) == (False, True)
+    assert "user_id" in run_.steps[0].result

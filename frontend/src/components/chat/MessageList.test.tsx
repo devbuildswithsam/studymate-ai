@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { MessageList } from '@/components/chat/MessageList'
+import type { AgentAction } from '@/api/actions'
 import type { ToolCallOut } from '@/api/chat'
 import type { ChatMessage } from '@/components/chat/types'
 
@@ -187,5 +188,112 @@ describe('MessageList tool calls (SMA-42)', () => {
     render(<MessageList messages={[ai('Water moves.')]} />)
 
     expect(screen.queryByRole('list', { name: 'Tools used' })).toBeNull()
+  })
+})
+
+describe('MessageList AI actions: confirmation cards and Undo (SMA-43)', () => {
+  const action = (
+    status: AgentAction['status'],
+    extra: Partial<AgentAction> = {},
+  ): AgentAction => ({
+    id: 'act1',
+    tool: 'complete_task',
+    kind: 'change',
+    status,
+    summary: "Mark 'Revise ch.3' as done",
+    error: null,
+    ...extra,
+  })
+  const answerWith = (...actions: AgentAction[]): ChatMessage => ({
+    id: 'a1',
+    role: 'assistant',
+    content: 'Please confirm.',
+    meta: { modelName: 'GPT-OSS 120B (Groq)', fallbackReason: null, actions },
+  })
+
+  it('shows a pending change as a card with Confirm and Cancel', async () => {
+    const onAction = vi.fn(async () => {})
+    render(<MessageList messages={[answerWith(action('pending'))]} onAction={onAction} />)
+
+    const card = within(screen.getByRole('list', { name: 'AI actions' })).getByRole('listitem')
+    expect(card).toHaveTextContent("Mark 'Revise ch.3' as done?")
+    await userEvent.click(within(card).getByRole('button', { name: 'Confirm' }))
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ id: 'act1' }), 'confirm')
+    await userEvent.click(within(card).getByRole('button', { name: 'Cancel' }))
+    expect(onAction).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'act1' }), 'cancel')
+  })
+
+  it('offers Undo on something the AI created', async () => {
+    const onAction = vi.fn(async () => {})
+    const created = action('done', {
+      tool: 'create_task',
+      kind: 'create',
+      summary: "Add task 'Essay'",
+    })
+    render(<MessageList messages={[answerWith(created)]} onAction={onAction} />)
+
+    const card = screen.getByRole('listitem', { name: "Add task 'Essay'" })
+    expect(card).toHaveTextContent("Done: Add task 'Essay'")
+    await userEvent.click(within(card).getByRole('button', { name: 'Undo' }))
+    expect(onAction).toHaveBeenCalledWith(created, 'undo')
+  })
+
+  it('shows how each action ended, without buttons', () => {
+    render(
+      <MessageList
+        messages={[
+          answerWith(
+            action('done', { id: 'x1' }), // a confirmed change: no Undo
+            action('cancelled', { id: 'x2' }),
+            action('undone', { id: 'x3', kind: 'create', summary: "Add task 'Essay'" }),
+            action('failed', { id: 'x4', error: 'No task with id t1.' }),
+          ),
+        ]}
+        onAction={vi.fn()}
+      />,
+    )
+
+    const cards = within(screen.getByRole('list', { name: 'AI actions' })).getAllByRole('listitem')
+    expect(cards.map((c) => c.textContent)).toEqual([
+      "Done: Mark 'Revise ch.3' as done",
+      "Cancelled: Mark 'Revise ch.3' as done",
+      "Undone: Add task 'Essay'",
+      "Failed: Mark 'Revise ch.3' as done (No task with id t1.)",
+    ])
+    expect(screen.queryByRole('button', { name: /Confirm|Cancel|Undo/ })).toBeNull()
+  })
+
+  it('keeps the buttons from being clicked twice while waiting', async () => {
+    let finish: () => void = () => {}
+    const onAction = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)))
+    render(<MessageList messages={[answerWith(action('pending'))]} onAction={onAction} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    finish()
+  })
+
+  it('says a held tool call is waiting for you', () => {
+    const held: ToolCallOut = {
+      name: 'complete_task',
+      arguments: { task_id: 't1' },
+      result: 'Not done yet',
+      is_error: false,
+      duration_ms: 1,
+      held: true,
+    }
+    render(
+      <MessageList
+        messages={[
+          { ...answerWith(action('pending')), meta: { ...answerWith().meta!, toolCalls: [held] } },
+        ]}
+      />,
+    )
+
+    expect(
+      within(screen.getByRole('list', { name: 'Tools used' })).getByRole('listitem'),
+    ).toHaveTextContent('Used tool: complete_task → waiting for your confirmation')
   })
 })

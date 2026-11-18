@@ -2,11 +2,13 @@
 // Model selector, "Use fallback" toggle and answer badges (wireframe 6.9). SMA-26.
 // Saved chats: reopen at /c/:id, continue with the same model, auto title (SMA-31).
 // "Save as note" on AI answers (SMA-32). "Used tool: …" lines under answers (SMA-42).
+// Confirmation cards and Undo for the AI's writes (SMA-43).
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
+import { type ActionVerb, type AgentAction, useAgentAction } from '@/api/actions'
 import { useSendMessage } from '@/api/chat'
 import { ApiError } from '@/api/client'
 import { addTurn, requestTitle, type SavedMessage, useConversation } from '@/api/conversations'
@@ -33,6 +35,7 @@ function toChatMessage(message: SavedMessage, models: ModelInfo[]): ChatMessage 
       // The reason is only known for answers given while the page was open.
       fallbackReason: message.fallback_used ? (message.fallback_reason ?? 'fallback used') : null,
       toolCalls: message.tool_calls ?? [], // SMA-42: "Used tool: …" lines
+      actions: message.actions ?? [], // SMA-43: cards and Undo
     },
   }
 }
@@ -59,6 +62,7 @@ export function ChatPage({ conversationId, pageKey }: Props) {
   const [allowFallback, setAllowFallback] = useState(true)
   const sendMessage = useSendMessage(setCreatedId)
   const createNote = useCreateNote()
+  const agentAction = useAgentAction(conversationId ?? createdId)
   const models = useModels()
 
   const modelList = models.data?.models ?? []
@@ -125,6 +129,15 @@ export function ChatPage({ conversationId, pageKey }: Props) {
     }
   }
 
+  /** Confirm, Cancel or Undo on one of the AI's actions. */
+  async function act(action: AgentAction, verb: ActionVerb) {
+    try {
+      await agentAction.mutateAsync({ action, verb })
+    } catch (error) {
+      toast.error(friendlyError(error)) // the card keeps its buttons: try again
+    }
+  }
+
   if (conversation.isError) {
     const gone = conversation.error instanceof ApiError && conversation.error.status === 404
     return (
@@ -167,6 +180,7 @@ export function ChatPage({ conversationId, pageKey }: Props) {
           messages={messages}
           isThinking={sendMessage.isPending}
           onSaveAsNote={saveAsNote}
+          onAction={act}
         />
       </div>
       <ChatInput

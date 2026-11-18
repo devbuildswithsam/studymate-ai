@@ -183,7 +183,7 @@ def count_queries(db_session) -> list[str]:
 
 
 @pytest.mark.parametrize("message_count", [2, 20])
-def test_a_conversation_with_messages_loads_in_two_queries(db_session, alice, message_count):
+def test_a_conversation_with_messages_loads_in_three_queries(db_session, alice, message_count):
     conversation = repo.create_conversation(db_session, alice.id)
     add_messages(db_session, conversation, *["x"] * message_count)
     db_session.commit()
@@ -192,9 +192,13 @@ def test_a_conversation_with_messages_loads_in_two_queries(db_session, alice, me
 
     found = repo.get_conversation(db_session, alice.id, conversation.id, with_messages=True)
     contents = [m.content for m in found.messages]  # touching .messages must not query again
+    actions = [a for m in found.messages for a in m.actions]  # nor .actions (SMA-43)
 
     assert len(contents) == message_count
-    assert len(statements) == 2  # the conversation, then all its messages at once
+    assert actions == []
+    # The conversation, all its messages at once, all their actions at once: the same 3
+    # for 2 or 20 messages (never one query per message: N+1).
+    assert len(statements) == 3
 
 
 # --- llm_calls ---------------------------------------------------------------------

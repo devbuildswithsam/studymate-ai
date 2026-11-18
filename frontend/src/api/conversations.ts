@@ -1,6 +1,7 @@
 // Saved conversations (backend: app/api/conversations.py). SMA-31.
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import type { AgentAction } from '@/api/actions'
 import type { ChatReply, ToolCallOut } from '@/api/chat'
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/api/client'
 
@@ -26,6 +27,7 @@ export type SavedMessage = {
   tokens_in: number | null
   tokens_out: number | null
   tool_calls?: ToolCallOut[] | null // SMA-42: the tools used for this answer
+  actions?: AgentAction[] // SMA-43: confirmation cards and Undo
   created_at: string
   fallback_reason?: string | null // only known for answers given while the page is open
 }
@@ -108,6 +110,7 @@ export function addTurn(
           tokens_in: reply.tokens_in,
           tokens_out: reply.tokens_out,
           tool_calls: reply.tool_calls,
+          actions: reply.actions,
           created_at: now,
         },
       ],

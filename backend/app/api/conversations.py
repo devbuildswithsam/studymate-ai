@@ -11,6 +11,7 @@ The user comes only from get_current_user_id, never from the request. Each reque
 transaction: the repositories never commit, these routes commit once at the end.
 """
 
+import functools
 import json
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -21,18 +22,21 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy.orm import Session
 
+from app.api.actions import ActionOut
 from app.api.deps import get_current_user_id
 from app.config import Settings, get_settings
 from app.db.session import _session_factory, get_db
 from app.mcp_server.context import ToolContext
 from app.models import Conversation
 from app.repositories import conversations as repo
+from app.services.actions import record_actions
 from app.services.agent import ToolStep, run_agent_for_user
 from app.services.llm.base import ChatOptions, ChatResponse, Message
 from app.services.llm.exceptions import AllModelsFailedError, LLMConfigError
 from app.services.llm.fallback import Attempt, FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
 from app.services.titles import generate_title
+from app.services.tool_policy import asks_to_act
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -54,7 +58,9 @@ MODE = "general"  # later: "grounded" (documents, Stage 4)
 # "by Sunday" or "tomorrow" (SMA-39 lesson).
 TOOLS_PROMPT = (
     " You can manage the student's study tasks and notes with tools. Today is {today} "
-    "({weekday}). Use a tool only when the student asks for something it does."
+    "({weekday}). Use a tool only when the student asks for something it does. "
+    "Changes to existing tasks, and anything the student didn't ask for, wait for their "
+    "confirmation in the app (SMA-43): never say those are done."
 )
 
 # Shared shapes for the dependencies every route uses.
@@ -94,6 +100,7 @@ class ToolCallOut(BaseModel):
     result: str  # what the tool sent back to the AI (shortened)
     is_error: bool
     duration_ms: int
+    held: bool = False  # SMA-43: not run, waiting for the student's confirmation
 
 
 class MessageOut(BaseModel):
@@ -109,6 +116,7 @@ class MessageOut(BaseModel):
     tokens_in: int | None
     tokens_out: int | None
     tool_calls: list[ToolCallOut] | None = None  # SMA-42
+    actions: list[ActionOut] = []  # SMA-43: confirmation cards and Undo buttons
     created_at: datetime
 
 
@@ -134,6 +142,7 @@ class ChatReply(BaseModel):
     model: str
     mode: Literal["general", "tool"] = MODE  # "tool": the AI used MCP tools (SMA-42)
     tool_calls: list[ToolCallOut] = []
+    actions: list[ActionOut] = []  # SMA-43: cards to confirm, creates to undo
     fallback_used: bool
     fallback_reason: str | None
     tokens_in: int
@@ -250,6 +259,8 @@ def send_message(
         tokens_out=outcome.tokens_out,
         tool_calls=[t.model_dump() for t in tool_calls] or None,
     )
+    # SMA-43: held writes become confirmation cards; creates that ran can be undone.
+    actions = record_actions(db, user_id, saved_answer, outcome.steps)
     repo.log_llm_calls(db, user_id, conversation_id, outcome.attempts, call_mode(uses_tools))
     db.commit()
 
@@ -261,6 +272,7 @@ def send_message(
         model=answer.model,
         mode=mode,
         tool_calls=tool_calls,
+        actions=[ActionOut.model_validate(a) for a in actions],
         fallback_used=outcome.fallback_used,
         fallback_reason=outcome.fallback_reason,
         tokens_in=outcome.tokens_in,
@@ -303,7 +315,18 @@ def ask_with_tools(
     """The agent loop (SMA-42). This route runs in a worker thread: from_thread.run runs
     the async loop on the app's event loop and waits for it."""
     run = anyio.from_thread.run(
-        run_agent_for_user, context, manager, messages, model_id, request.allow_fallback, options
+        functools.partial(
+            run_agent_for_user,
+            context,
+            manager,
+            messages,
+            model_id,
+            request.allow_fallback,
+            options,
+            # SMA-43: only the student's OWN message can ask for a write (not notes,
+            # documents or tool results: those reach the model, never this check).
+            user_asked_to_act=asks_to_act(request.message),
+        )
     )
     return Outcome(
         run.response,
@@ -336,6 +359,7 @@ def tool_call_out(step: ToolStep) -> ToolCallOut:
         result=step.result[:1000],  # tool results can be long: keep the saved copy short
         is_error=step.is_error,
         duration_ms=step.duration_ms,
+        held=step.held,
     )
 
 

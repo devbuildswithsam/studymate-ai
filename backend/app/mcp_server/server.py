@@ -6,6 +6,7 @@ Rules (guide 7.2 "Safety rules for tools"):
 - No delete tools: deleting happens only through normal UI buttons.
 - Every tool is capped: string lengths, list sizes, number of results.
 - Tools reuse the app's repositories, so the AI follows the same rules as the UI.
+- Each tool is tagged read / create / change (TOOL_KINDS) for the write-action policy.
 """
 
 from datetime import date
@@ -28,6 +29,18 @@ SNIPPET_CHARS = 300
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True)
 WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False)  # never deletes
+
+# The write-action policy's tag for every tool (guide 7.2, SMA-43): "read" runs on its own,
+# "create" runs only if the student asked for an action, "change" always waits for a
+# Confirm click (app/services/tool_policy.py). A test fails if a tool has no tag.
+TOOL_KINDS = {
+    "list_tasks": "read",
+    "search_notes": "read",
+    "create_task": "create",
+    "save_note": "create",
+    "update_task": "change",
+    "complete_task": "change",
+}
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 TaskDescription = Annotated[str, StringConstraints(max_length=2000)]

@@ -43,7 +43,8 @@ def get_conversation(
         Conversation.id == conversation_id, Conversation.user_id == user_id
     )
     if with_messages:
-        query = query.options(selectinload(Conversation.messages))
+        # Each message's actions too (SMA-43): one more query for all of them.
+        query = query.options(selectinload(Conversation.messages).selectinload(Message.actions))
     return db.scalar(query)
 
 

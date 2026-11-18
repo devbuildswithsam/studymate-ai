@@ -4,86 +4,28 @@ The AI is a FakeProvider; the tools are the app's real MCP server acting for the
 request's user on the temporary database.
 """
 
-import json
 from datetime import date
 
-import pytest
 from sqlalchemy import select
 
 from app.api.deps import get_current_user_id
 from app.main import app
 from app.models import LLMCall, Message, Task, User
-from app.services.llm.base import ToolCall
 from app.services.llm.exceptions import ProviderUnavailableError
 from app.services.llm.fake import FakeProvider
-from app.services.llm.fallback import FallbackManager, get_fallback_manager
-from app.services.llm.registry import ModelRegistry, get_registry
-
-REGISTRY = ModelRegistry.model_validate(
-    {
-        "version": 1,
-        "providers": {"p": {"base_url": "https://p.test/v1", "api_key_env": "P_KEY"}},
-        "models": [
-            {
-                "id": "tools-model",
-                "provider": "p",
-                "display_name": "With tools",
-                "priority": 1,
-                "supports_tools": True,
-                "default_for": ["chat"],
-            },
-            {
-                "id": "plain-model",
-                "provider": "p",
-                "display_name": "No tools",
-                "priority": 2,
-                "supports_tools": False,
-            },
-        ],
-    }
-)
-QUESTION = "Add a task to finish thermodynamics notes by Sunday, then list my pending tasks"
-
-
-def call(name: str, arguments: dict, call_id: str = "") -> ToolCall:
-    return ToolCall(id=call_id or f"call_{name}", name=name, arguments=json.dumps(arguments))
-
-
-@pytest.fixture
-def fakes():
-    return {
-        "tools-model": FakeProvider(replies=["plain answer"]),
-        "plain-model": FakeProvider(replies=["answer without tools"]),
-    }
-
-
-@pytest.fixture
-def chat(client, fakes):
-    manager = FallbackManager(REGISTRY, lambda m: fakes[m.id])
-    app.dependency_overrides[get_registry] = lambda: REGISTRY
-    app.dependency_overrides[get_fallback_manager] = lambda: manager
-
-    def send(message: str, **extra):
-        conversation_id = client.post("/api/conversations", json={}).json()["id"]
-        response = client.post(
-            f"/api/conversations/{conversation_id}/messages", json={"message": message, **extra}
-        )
-        return conversation_id, response
-
-    return send
-
+from tests.tool_helpers import QUESTION, call
 
 # --- Done when ---------------------------------------------------------------------
 
 
-def test_add_a_task_by_sunday_then_list_pending_tasks(chat, fakes, client):
-    fakes["tools-model"].replies = [
+def test_add_a_task_by_sunday_then_list_pending_tasks(tool_chat, tool_fakes, client):
+    tool_fakes["tools-model"].replies = [
         [call("create_task", {"title": "Finish thermodynamics notes", "due_date": "2026-11-22"})],
         [call("list_tasks", {"status": "todo"})],
         "Added it. Your pending task: Finish thermodynamics notes (due Sunday 22 Nov).",
     ]
 
-    conversation_id, response = chat(QUESTION)
+    conversation_id, response = tool_chat(QUESTION)
 
     assert response.status_code == 200, response.text
     reply = response.json()
@@ -98,10 +40,10 @@ def test_add_a_task_by_sunday_then_list_pending_tasks(chat, fakes, client):
     assert [(t["title"], t["created_by"]) for t in board] == [("Finish thermodynamics notes", "ai")]
 
 
-def test_the_tool_calls_are_saved_with_the_answer(chat, fakes, client):
-    fakes["tools-model"].replies = [[call("list_tasks", {})], "You have no tasks."]
+def test_the_tool_calls_are_saved_with_the_answer(tool_chat, tool_fakes, client):
+    tool_fakes["tools-model"].replies = [[call("list_tasks", {})], "You have no tasks."]
 
-    conversation_id, _ = chat("list my tasks")
+    conversation_id, _ = tool_chat("list my tasks")
 
     saved = client.get(f"/api/conversations/{conversation_id}").json()["messages"][-1]
     assert saved["mode"] == "tool"
@@ -110,10 +52,10 @@ def test_the_tool_calls_are_saved_with_the_answer(chat, fakes, client):
     assert saved["tool_calls"][0]["duration_ms"] >= 0
 
 
-def test_every_model_call_of_every_turn_is_logged(chat, fakes, db_session):
-    fakes["tools-model"].replies = [[call("list_tasks", {})], "Done."]
+def test_every_model_call_of_every_turn_is_logged(tool_chat, tool_fakes, db_session):
+    tool_fakes["tools-model"].replies = [[call("list_tasks", {})], "Done."]
 
-    chat("list my tasks")
+    tool_chat("list my tasks")
 
     calls = db_session.scalars(select(LLMCall)).all()
     assert [(c.model, c.status, c.mode) for c in calls] == [
@@ -122,60 +64,62 @@ def test_every_model_call_of_every_turn_is_logged(chat, fakes, db_session):
     ]
 
 
-def test_the_ai_is_told_todays_date_when_tools_are_offered(chat, fakes):
-    chat("add a task for tomorrow")
+def test_the_ai_is_told_todays_date_when_tools_are_offered(tool_chat, tool_fakes):
+    tool_chat("add a task for tomorrow")
 
-    system = fakes["tools-model"].calls[0][0]["content"]
+    system = tool_fakes["tools-model"].calls[0][0]["content"]
     assert date.today().isoformat() in system
 
 
 # --- When tools are not used ----------------------------------------------------------
 
 
-def test_a_plain_answer_is_a_general_message(chat, fakes):
-    _, response = chat("What is osmosis?")
+def test_a_plain_answer_is_a_general_message(tool_chat, tool_fakes):
+    _, response = tool_chat("What is osmosis?")
 
     reply = response.json()
     assert (reply["mode"], reply["tool_calls"]) == ("general", [])
-    assert fakes["tools-model"].options[0].tools  # tools were offered, just not used
+    assert tool_fakes["tools-model"].options[0].tools  # tools were offered, just not used
 
 
-def test_a_model_without_tool_support_gets_no_tools(chat, fakes):
-    _, response = chat("What is osmosis?", model="plain-model")
+def test_a_model_without_tool_support_gets_no_tools(tool_chat, tool_fakes):
+    _, response = tool_chat("What is osmosis?", model="plain-model")
 
     assert response.json()["reply"] == "answer without tools"
-    assert fakes["plain-model"].options[0].tools is None
+    assert tool_fakes["plain-model"].options[0].tools is None
 
 
 # --- Safety and failures ----------------------------------------------------------------
 
 
-def test_tools_act_for_the_user_making_the_request(chat, fakes, client, db_session):
+def test_tools_act_for_the_user_making_the_request(tool_chat, tool_fakes, client, db_session):
     bob = User(email="bob@example.com")
     db_session.add(bob)
     db_session.commit()
-    fakes["tools-model"].replies = [[call("create_task", {"title": "Bob's task"})], "Done."]
+    tool_fakes["tools-model"].replies = [[call("create_task", {"title": "Bob's task"})], "Done."]
 
     app.dependency_overrides[get_current_user_id] = lambda: bob.id
-    chat("add a task")
+    tool_chat("add a task")
 
     task = db_session.scalars(select(Task)).one()
     assert task.user_id == bob.id  # from the request, never from the model
 
 
-def test_an_injected_user_id_is_refused_and_nothing_is_written(chat, fakes, db_session):
-    fakes["tools-model"].replies = [
+def test_an_injected_user_id_is_refused_and_nothing_is_written(tool_chat, tool_fakes, db_session):
+    tool_fakes["tools-model"].replies = [
         [call("create_task", {"title": "x", "user_id": "someone-else"})],
         "I couldn't do that.",
     ]
 
-    _, response = chat("add a task for someone else")
+    _, response = tool_chat("add a task for someone else")
 
     assert response.json()["tool_calls"][0]["is_error"] is True
     assert db_session.scalars(select(Task)).all() == []
 
 
-def test_all_models_failing_mid_loop_returns_503_and_logs_every_call(chat, fakes, db_session):
+def test_all_models_failing_mid_loop_returns_503_and_logs_every_call(
+    tool_chat, tool_fakes, db_session
+):
     class FailsAfterFirstTurn(FakeProvider):
         def chat(self, messages, options=None):
             if len(self.calls) >= 1:
@@ -183,9 +127,9 @@ def test_all_models_failing_mid_loop_returns_503_and_logs_every_call(chat, fakes
                 raise ProviderUnavailableError("503", "p")
             return super().chat(messages, options)
 
-    fakes["tools-model"] = FailsAfterFirstTurn(replies=[[call("list_tasks", {})]])
+    tool_fakes["tools-model"] = FailsAfterFirstTurn(replies=[[call("list_tasks", {})]])
 
-    _, response = chat("list my tasks")
+    _, response = tool_chat("list my tasks")
 
     assert response.status_code == 503
     statuses = [c.status for c in db_session.scalars(select(LLMCall)).all()]
@@ -193,10 +137,10 @@ def test_all_models_failing_mid_loop_returns_503_and_logs_every_call(chat, fakes
     assert db_session.scalars(select(Message)).all() == []  # no half-saved turn
 
 
-def test_the_tool_call_limit_ends_with_a_clear_message(chat, fakes):
-    fakes["tools-model"].replies = [[call("list_tasks", {})]]  # never answers
+def test_the_tool_call_limit_ends_with_a_clear_message(tool_chat, tool_fakes):
+    tool_fakes["tools-model"].replies = [[call("list_tasks", {})]]  # never answers
 
-    _, response = chat("list my tasks forever")
+    _, response = tool_chat("list my tasks forever")
 
     reply = response.json()
     assert len(reply["tool_calls"]) == 5

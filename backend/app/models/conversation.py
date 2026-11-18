@@ -22,6 +22,7 @@ from app.db.base import Base
 from app.models.common import allowed, new_id, utcnow
 
 if TYPE_CHECKING:  # for type hints only; avoids a circular import at runtime
+    from app.models.agent_action import AgentAction
     from app.models.user import User
 
 MESSAGE_ROLES = ("user", "assistant", "tool")
@@ -87,7 +88,15 @@ class Message(Base):
     tokens_in: Mapped[int | None] = mapped_column(Integer)
     tokens_out: Mapped[int | None] = mapped_column(Integer)
     citations: Mapped[list | None] = mapped_column(JSON)  # Stage 4: [{document, page, ...}]
-    tool_calls: Mapped[list | None] = mapped_column(JSON)  # Stage 6: MCP tool calls
+    tool_calls: Mapped[list | None] = mapped_column(JSON)  # the MCP tools used (SMA-42)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    # SMA-43: the AI's writes for this answer (cards and Undo). lazy="raise": load them
+    # with selectinload, never one hidden query per message.
+    actions: Mapped[list["AgentAction"]] = relationship(
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AgentAction.position",
+        lazy="raise",
+    )

@@ -1,6 +1,7 @@
 // Chat messages, saved by the backend (app/api/conversations.py). SMA-25, SMA-30.
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import type { AgentAction } from '@/api/actions'
 import { apiPost } from '@/api/client'
 import { LIST_KEY } from '@/api/conversations'
 
@@ -19,6 +20,7 @@ export type ToolCallOut = {
   result: string // what the tool sent back to the AI (shortened)
   is_error: boolean
   duration_ms: number
+  held?: boolean // SMA-43: not run, waiting for your confirmation
 }
 
 /** Same fields as the backend's ChatReply. */
@@ -30,6 +32,7 @@ export type ChatReply = {
   model: string
   mode: 'general' | 'tool' // 'tool': the AI used tools (SMA-42)
   tool_calls: ToolCallOut[]
+  actions: AgentAction[] // SMA-43: cards to confirm, creates to undo
   fallback_used: boolean
   fallback_reason: string | null
   tokens_in: number
