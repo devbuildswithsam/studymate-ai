@@ -614,3 +614,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-42 — Agent loop in chat with tool activity shown in the UI
+**Date:** 18 Nov 2026
+
+**What I did**
+- Connected the chat to StudyMate's MCP tools. "Add a task to finish thermodynamics notes by Sunday, then list my pending tasks" created the task (due Sunday, AI marker) and listed it, with "Used tool: …" lines under the answer.
+- Switched the default chat model to Groq GPT-OSS 120B, with Gemini as the fallback (ADR-0007), because Gemini kept timing out.
+
+**What I learned**
+- **The agent loop:** the model never runs anything itself. It *asks* for a tool call; the backend runs it, sends the result back, and asks again, until the model answers in plain text. A limit (5 calls) stops it from looping forever.
+- **Mistakes become messages, not crashes:** bad JSON, an unknown tool or an invalid value goes back to the model as error text, and it can fix its own call.
+- **Each tool result carries its call's id**, so the model knows which answer belongs to which request.
+- **Provider quirks matter:** Gemini adds a "thought signature" that must be sent back unchanged. That's why the loop stays on the model that answered first, instead of switching provider halfway.
+- **The model needs today's date** to work out "by Sunday"; it goes in the system prompt.
+- **Async errors can be wrapped:** an error raised inside the MCP client came out as an `ExceptionGroup`, so the code raises it only after the session has closed.
+- **Pre-commit can stop a commit:** black re-formatted 2 files, so nothing was committed until I added them again.
+
+**What confused me**
+- …
