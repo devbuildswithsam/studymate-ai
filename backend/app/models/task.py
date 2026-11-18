@@ -33,9 +33,12 @@ class Task(Base):
     # server_default: the DATABASE fills these in (SMA-33 lesson), so every writer gets them.
     priority: Mapped[str] = mapped_column(String(10), default="medium", server_default="medium")
     status: Mapped[str] = mapped_column(String(10), default="todo", server_default="todo")
-    # The document this task is about. documents arrive in Stage 4: the foreign key is
-    # added then (a foreign key can't point to a table that doesn't exist yet).
-    document_id: Mapped[str | None] = mapped_column(String(36))
+    # The document this task is about. SET NULL: deleting the document keeps the task
+    # (it's still your task), just without the link. The foreign key came with the
+    # documents table (SMA-44): it can't point to a table that doesn't exist yet.
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), index=True
+    )
     created_by: Mapped[str] = mapped_column(String(10), default="user", server_default="user")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

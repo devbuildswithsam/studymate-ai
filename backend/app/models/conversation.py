@@ -23,6 +23,7 @@ from app.models.common import allowed, new_id, utcnow
 
 if TYPE_CHECKING:  # for type hints only; avoids a circular import at runtime
     from app.models.agent_action import AgentAction
+    from app.models.document import Document
     from app.models.user import User
 
 MESSAGE_ROLES = ("user", "assistant", "tool")
@@ -58,6 +59,11 @@ class Conversation(Base):
         # Never load messages with a hidden query (one per conversation = N+1 queries):
         # ask for them up front with selectinload, or get an error. SMA-30.
         lazy="raise",
+    )
+    # SMA-44: the documents a study chat may search (many-to-many, guide 7.1).
+    # passive_deletes: the database's CASCADE removes the links when either side goes.
+    documents: Mapped[list["Document"]] = relationship(
+        secondary="conversation_documents", passive_deletes=True, lazy="raise"
     )
 
 

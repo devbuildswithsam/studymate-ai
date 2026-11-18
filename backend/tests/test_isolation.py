@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import get_current_user
 from app.main import app
-from app.models import AgentAction, Conversation, LLMCall, Message, Note, Task, User
+from app.models import AgentAction, Conversation, Document, LLMCall, Message, Note, Task, User
 from app.services.llm.fake import FakeProvider
 from tests.test_conversations_api import use_fakes
 
@@ -77,12 +77,16 @@ def alices_data(api, two_users, db_session) -> dict[str, str]:
     )
     db_session.add(card)
     db_session.commit()
+    document_id = client.post(
+        "/api/documents", files={"file": ("Alice's notes.md", b"# Thermodynamics", "text/markdown")}
+    ).json()["id"]
     return {
         "conversation": conversation_id,
         "message": reply["message_id"],
         "note": note_id,
         "task": task_id,
         "action": card.id,
+        "document": document_id,
     }
 
 
@@ -100,6 +104,7 @@ def fingerprint(db_session) -> dict:
             select(Task.id, Task.title, Task.status, Task.due_date, Task.completed_at)
         ).all(),
         "actions": db_session.execute(select(AgentAction.id, AgentAction.status)).all(),
+        "documents": db_session.execute(select(Document.id, Document.filename)).all(),
     }
 
 
@@ -120,6 +125,8 @@ ISOLATION_CASES = [
     ("POST", "/api/actions/{action_id}/confirm", None),  # SMA-43
     ("POST", "/api/actions/{action_id}/cancel", None),
     ("POST", "/api/actions/{action_id}/undo", None),
+    ("GET", "/api/documents/{document_id}", None),  # SMA-44
+    ("DELETE", "/api/documents/{document_id}", None),
 ]
 
 
@@ -129,6 +136,7 @@ def fill(path: str, ids: dict[str, str]) -> str:
         note_id=ids["note"],
         task_id=ids["task"],
         action_id=ids["action"],
+        document_id=ids["document"],
     )
 
 
@@ -161,6 +169,7 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
         "note": UNKNOWN_ID,
         "task": UNKNOWN_ID,
         "action": UNKNOWN_ID,
+        "document": UNKNOWN_ID,
     }
 
     alices = client.request(method, fill(path, alices_data), json=body)
@@ -198,6 +207,7 @@ def test_b_s_lists_and_search_do_not_show_a_s_items(api, two_users, alices_data)
     assert client.get("/api/notes/search", params={"q": "m * a"}).json() == []
     assert client.get("/api/tasks").json() == []
     assert client.get("/api/tasks", params={"status": "todo"}).json() == []
+    assert client.get("/api/documents").json() == []
 
 
 def test_b_cannot_save_a_note_from_a_s_message(api, two_users, alices_data, db_session):

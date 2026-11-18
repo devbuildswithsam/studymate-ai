@@ -113,8 +113,21 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `PATCH / DELETE /api/tasks/{id}` — edit or move between columns (send only what changes;
   `null` clears the due date or description) / delete. Moving to `done` records `completed_at`.
   `created_by` is always `user` here: only the AI's MCP tools (SMA-41) create `ai` tasks.
+- `POST /api/documents` — upload one file (multipart form, field `file`): **PDF, TXT or MD,
+  at most 4 MB**. The type is decided by the file's **content** (a PDF must start with
+  `%PDF-`; TXT/MD must be UTF-8 text), never by its name or the browser's Content-Type.
+  Too big → **413**, wrong or disguised type → **415**, empty → 422. Only the file's own
+  name is kept (no folders). The file itself is not stored: the document is recorded as
+  `processing` until ingestion (SMA-45..47) turns it into text chunks.
+- `GET /api/documents` (newest first) · `GET / DELETE /api/documents/{id}` — deleting a
+  document deletes its chunks and study-chat links; tasks about it are kept, unlinked.
 
-Another user's conversation, note or task always answers **404**, the same as one that doesn't exist.
+```bat
+curl -F "file=@Physics.pdf" http://127.0.0.1:8000/api/documents
+```
+
+Another user's conversation, note, task, AI action or document always answers **404**, the
+same as one that doesn't exist.
 
 ### MCP server (`/mcp`)
 StudyMate's tools for AI clients (guide 7.2), over Streamable HTTP (stateless, plain JSON):
@@ -272,7 +285,8 @@ backend/
     config.py          settings from backend/.env (pydantic-settings)
     db/                SQLAlchemy: base.py (models' base class), session.py (engine, get_db),
                        seed.py (the local user)
-    models/            tables: users, conversations + messages, notes, llm_calls
+    models/            tables: users, conversations + messages, notes, llm_calls, tasks,
+                       agent_actions, documents + chunks + conversation_documents
     errors.py          one error format: {"error": {"code", "message"}}
     api/               routers: health.py, models.py, conversations.py (CRUD + chat), notes.py, tasks.py
                        (+ deps.py: get_current_user, the only source of user_id)

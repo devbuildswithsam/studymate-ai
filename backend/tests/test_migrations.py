@@ -154,3 +154,31 @@ def test_existing_messages_are_numbered_in_order_when_position_is_added(tmp_path
     command.upgrade(config, MODE_REVISION_PARENT)
 
     assert sql(url, "SELECT id, position FROM messages ORDER BY position") == [("m1", 1), ("m2", 2)]
+
+
+DOCUMENTS_REVISION = "232c8b127f71"  # SMA-44: documents, chunks; tasks.document_id gets its FK
+
+
+def test_existing_tasks_survive_getting_a_document_foreign_key(tmp_path):
+    # Adding the foreign key rebuilds the tasks table (SQLite batch mode): no row may be lost.
+    url = f"sqlite:///{(tmp_path / 'docs.db').as_posix()}"
+    config = alembic_config(url)
+    command.upgrade(config, f"{DOCUMENTS_REVISION}-1")
+    seed_real_looking_data(url)
+    sql(
+        url,
+        "INSERT INTO tasks (id, user_id, title, document_id, created_at) VALUES "
+        "('t1', 'u1', 'Revise', NULL, '2026-11-01'), "
+        "('t2', 'u1', 'Old link', 'no-such-document', '2026-11-01')",
+    )
+
+    command.upgrade(config, DOCUMENTS_REVISION)
+
+    # Both tasks kept; the link that pointed nowhere is cleared, so the FK holds.
+    assert sql(url, "SELECT id, title, document_id FROM tasks ORDER BY id") == [
+        ("t1", "Revise", None),
+        ("t2", "Old link", None),
+    ]
+    assert sql(url, "PRAGMA foreign_key_check") == []
+    command.downgrade(config, "-1")
+    assert sql(url, "SELECT id FROM tasks ORDER BY id") == [("t1",), ("t2",)]

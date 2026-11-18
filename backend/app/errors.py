@@ -20,6 +20,9 @@ CODES_BY_STATUS = {
     403: "forbidden",
     404: "not_found",
     405: "method_not_allowed",
+    409: "conflict",  # e.g. an AI action already used (SMA-43)
+    413: "payload_too_large",  # upload over 4 MB (SMA-44)
+    415: "unsupported_media_type",  # upload that isn't a real PDF / TXT / MD (SMA-44)
     422: "validation_error",
     429: "rate_limited",
     500: "internal_error",

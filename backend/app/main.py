@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import Route
 
-from app.api import actions, conversations, health, models, notes, tasks
+from app.api import actions, conversations, documents, health, models, notes, tasks
 from app.config import APP_VERSION, get_settings
 from app.errors import register_error_handlers
 from app.mcp_server.http import McpEndpoint, run_mcp
@@ -48,5 +48,6 @@ app.include_router(conversations.router)
 app.include_router(notes.router)
 app.include_router(tasks.router)
 app.include_router(actions.router)  # SMA-43
+app.include_router(documents.router)  # SMA-44
 # MCP (guide 7.2): StudyMate's tools for AI clients. Local mode: this computer only.
 app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))
