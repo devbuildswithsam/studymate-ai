@@ -1,7 +1,7 @@
 // The general chat page (wireframe 6.1). SMA-25 (test-first). fetch is faked: no backend.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { mockApi, renderApp } from '@/test/render'
 
@@ -587,5 +587,134 @@ describe('Save as note (SMA-32)', () => {
 
     const question = within(messages()).getByText('My question').closest('li')!
     expect(within(question).queryByRole('button', { name: 'Save as note' })).toBeNull()
+  })
+})
+
+describe('Answers that used tools (SMA-42)', () => {
+  const CREATE = {
+    name: 'create_task',
+    arguments: { title: 'Finish thermodynamics notes', due_date: '2026-11-22' },
+    result: '{"id": "t9", "title": "Finish thermodynamics notes"}',
+    is_error: false,
+    duration_ms: 15,
+  }
+  const LIST = {
+    name: 'list_tasks',
+    arguments: { status: 'todo' },
+    result: '{}',
+    is_error: false,
+    duration_ms: 4,
+  }
+  const NEW_TASK = {
+    id: 't9',
+    title: 'Finish thermodynamics notes',
+    description: null,
+    due_date: '2026-11-22',
+    priority: 'medium',
+    status: 'todo',
+    document_id: null,
+    created_by: 'ai',
+    created_at: '2026-11-18T09:00:00Z',
+    completed_at: null,
+  }
+
+  function toolReply() {
+    const answer = reply('Added it. Your pending task: Finish thermodynamics notes.')
+    return {
+      body: {
+        ...answer.body,
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        mode: 'tool',
+        tool_calls: [CREATE, LIST],
+      },
+    }
+  }
+
+  it('Done when: shows "Used tool" lines under the answer', async () => {
+    mockApi({ '/api/health': HEALTH, '/api/models': MODELS, ...chat(toolReply()) })
+    renderApp('/')
+
+    await userEvent.type(
+      input(),
+      'Add a task to finish thermodynamics notes by Sunday, then list my pending tasks{Enter}',
+    )
+
+    const answer = (await within(messages()).findByText(/Added it\./)).closest('li')!
+    const lines = within(within(answer).getByRole('list', { name: 'Tools used' })).getAllByRole(
+      'listitem',
+    )
+    expect(lines.map((l) => l.textContent)).toEqual([
+      'Used tool: create_task → title: Finish thermodynamics notes, due_date: 2026-11-22',
+      'Used tool: list_tasks → status: todo',
+    ])
+    expect(within(answer).getByText('Used tools')).toBeInTheDocument()
+  })
+
+  it('shows the tool lines again when the chat is reopened', async () => {
+    const savedChat = {
+      id: 'c7',
+      title: 'Thermodynamics task',
+      provider: 'groq',
+      model: 'openai/gpt-oss-120b',
+      created_at: '2026-11-18T09:00:00Z',
+      updated_at: '2026-11-18T09:00:00Z',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Added it.',
+          provider: 'groq',
+          model: 'openai/gpt-oss-120b',
+          mode: 'tool',
+          fallback_used: false,
+          tokens_in: 10,
+          tokens_out: 5,
+          tool_calls: [CREATE],
+          created_at: '2026-11-18T09:00:00Z',
+        },
+      ],
+    }
+    mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      'GET /api/conversations': { body: [savedChat] },
+      'GET /api/conversations/c7': { body: savedChat },
+    })
+    renderApp('/c/c7')
+
+    expect(await screen.findByText(/Used tool:/)).toHaveTextContent(
+      'Used tool: create_task → title: Finish thermodynamics notes',
+    )
+  })
+
+  it('the Tasks board shows the task the AI created', async () => {
+    let taskCreated = false
+    mockApi({
+      '/api/health': HEALTH,
+      '/api/models': MODELS,
+      'GET /api/conversations': { body: [] },
+      'GET /api/tasks': { body: [] },
+      'POST /api/conversations': { status: 201, body: { id: 'conv-1' } },
+      '/api/conversations/conv-1/messages': async () => {
+        taskCreated = true // the backend's tool wrote the task
+        return Response.json(toolReply().body)
+      },
+    })
+    // The board after the chat: replace the empty list with the new task.
+    const fetch = vi.mocked(globalThis.fetch)
+    const real = fetch.getMockImplementation()!
+    fetch.mockImplementation(async (url, init) =>
+      String(url) === '/api/tasks' && taskCreated ? Response.json([NEW_TASK]) : real(url, init),
+    )
+    renderApp('/tasks')
+    await screen.findByRole('heading', { name: 'Tasks' })
+
+    await userEvent.click(screen.getByRole('link', { name: 'Chat' }))
+    await userEvent.type(input(), 'Add a task to finish thermodynamics notes{Enter}')
+    await within(messages()).findByText(/Added it\./)
+    await userEvent.click(screen.getByRole('link', { name: 'Tasks' }))
+
+    expect(await screen.findByText('Finish thermodynamics notes')).toBeInTheDocument()
   })
 })

@@ -30,6 +30,15 @@ def test_the_real_models_yaml_is_valid():
     assert registry.enabled_models(), "at least one model must be enabled"
 
 
+def test_the_real_chat_default_can_use_tools_and_is_tried_first():
+    # SMA-42: chat messages may use MCP tools, so the default model must support them.
+    registry = load_registry()
+    default = registry.default_model("chat")
+
+    assert registry.get(default).supports("tools")
+    assert registry.enabled_models()[0].id == default  # first in the fallback order
+
+
 def test_enabled_models_are_sorted_by_priority_and_skip_disabled():
     data = registry_with(lambda d: d["models"][1].update(enabled=True, priority=0))
 

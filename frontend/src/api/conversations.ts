@@ -1,7 +1,7 @@
 // Saved conversations (backend: app/api/conversations.py). SMA-31.
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import type { ChatReply } from '@/api/chat'
+import type { ChatReply, ToolCallOut } from '@/api/chat'
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/api/client'
 
 /** Same fields as the backend's ConversationOut: one row of the sidebar. */
@@ -25,6 +25,7 @@ export type SavedMessage = {
   fallback_used: boolean
   tokens_in: number | null
   tokens_out: number | null
+  tool_calls?: ToolCallOut[] | null // SMA-42: the tools used for this answer
   created_at: string
   fallback_reason?: string | null // only known for answers given while the page is open
 }
@@ -106,6 +107,7 @@ export function addTurn(
           fallback_reason: reply.fallback_reason,
           tokens_in: reply.tokens_in,
           tokens_out: reply.tokens_out,
+          tool_calls: reply.tool_calls,
           created_at: now,
         },
       ],

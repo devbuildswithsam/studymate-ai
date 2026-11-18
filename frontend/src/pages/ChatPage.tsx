@@ -1,7 +1,7 @@
 // General chat (wireframe 6.1): messages, input, loading and friendly errors. SMA-25.
 // Model selector, "Use fallback" toggle and answer badges (wireframe 6.9). SMA-26.
 // Saved chats: reopen at /c/:id, continue with the same model, auto title (SMA-31).
-// "Save as note" on AI answers (SMA-32).
+// "Save as note" on AI answers (SMA-32). "Used tool: …" lines under answers (SMA-42).
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -32,6 +32,7 @@ function toChatMessage(message: SavedMessage, models: ModelInfo[]): ChatMessage 
       modelName: answeredBy?.display_name ?? message.model, // raw id if the list isn't loaded
       // The reason is only known for answers given while the page was open.
       fallbackReason: message.fallback_used ? (message.fallback_reason ?? 'fallback used') : null,
+      toolCalls: message.tool_calls ?? [], // SMA-42: "Used tool: …" lines
     },
   }
 }

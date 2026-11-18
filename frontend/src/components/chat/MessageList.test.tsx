@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { MessageList } from '@/components/chat/MessageList'
+import type { ToolCallOut } from '@/api/chat'
 import type { ChatMessage } from '@/components/chat/types'
 
 const user = (content: string, id = 'u1'): ChatMessage => ({ id, role: 'user', content })
@@ -129,5 +130,62 @@ describe('MessageList badges (SMA-26)', () => {
     render(<MessageList messages={[user('Hi')]} />)
 
     expect(screen.queryByText('General AI')).toBeNull()
+  })
+})
+
+describe('MessageList tool calls (SMA-42)', () => {
+  const withTools = (toolCalls: ToolCallOut[]): ChatMessage => ({
+    id: 'a1',
+    role: 'assistant',
+    content: 'Added it.',
+    meta: { modelName: 'GPT-OSS 120B (Groq)', fallbackReason: null, toolCalls },
+  })
+  const tool = (name: string, args: ToolCallOut['arguments'], isError = false): ToolCallOut => ({
+    name,
+    arguments: args,
+    result: isError ? 'Input validation error: priority must be low, medium or high' : '{}',
+    is_error: isError,
+    duration_ms: 12,
+  })
+
+  it('shows a "Used tool" line for each tool the AI used, with its arguments', () => {
+    render(
+      <MessageList
+        messages={[
+          withTools([
+            tool('create_task', { title: 'Finish thermodynamics notes', due_date: '2026-11-22' }),
+            tool('list_tasks', {}),
+          ]),
+        ]}
+      />,
+    )
+
+    const lines = within(screen.getByRole('list', { name: 'Tools used' })).getAllByRole('listitem')
+    expect(lines.map((l) => l.textContent)).toEqual([
+      'Used tool: create_task → title: Finish thermodynamics notes, due_date: 2026-11-22',
+      'Used tool: list_tasks',
+    ])
+  })
+
+  it('marks a failed tool call and says why', () => {
+    render(
+      <MessageList messages={[withTools([tool('create_task', { priority: 'urgent' }, true)])]} />,
+    )
+
+    const line = within(screen.getByRole('list', { name: 'Tools used' })).getByRole('listitem')
+    expect(line).toHaveTextContent('failed: Input validation error: priority must be')
+  })
+
+  it('labels the answer "Used tools" instead of "General AI"', () => {
+    render(<MessageList messages={[withTools([tool('list_tasks', {})])]} />)
+
+    expect(screen.getByText('Used tools')).toBeInTheDocument()
+    expect(screen.queryByText('General AI')).toBeNull()
+  })
+
+  it('shows no tool list on a plain answer', () => {
+    render(<MessageList messages={[ai('Water moves.')]} />)
+
+    expect(screen.queryByRole('list', { name: 'Tools used' })).toBeNull()
   })
 })

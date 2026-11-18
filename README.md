@@ -12,7 +12,9 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > user, **conversations saved in the database** (they survive a restart), a "Recent chats"
 > sidebar with AI titles, and **Notes** (search, edit, "Save as note" on any AI answer).
 > Stage 3 (MCP): the MCP lab (`mcp_lab/`), a **Tasks** board (To do / Doing / Done), and the
-> app's own **MCP server** at `/mcp` (task and note tools for AI clients).
+> app's own **MCP server** at `/mcp` (task and note tools for AI clients), and **chat that
+> uses those tools**: "Add a task … by Sunday" creates it, with "Used tool: …" lines under
+> the answer. Default chat model: Groq GPT-OSS 120B, Gemini as fallback ([ADR-0007](docs/adr/0007-groq-as-default-model.md)).
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -133,6 +135,20 @@ Try it with MCP Inspector while the API runs (transport **Streamable HTTP**, URL
 npx @modelcontextprotocol/inspector@2.15.0
 ```
 
+### Chat with tools (SMA-42)
+When the chat's model can call tools (`supports_tools` in `models.yaml`), it gets the same
+tools in-process: the backend runs the **agent loop** (`app/services/agent.py`). The model asks
+for a tool, the backend runs it through the MCP server *for the signed-in user*, sends the
+result back, and repeats until the model answers.
+
+- At most **5 tool calls** per message; then the answer says it stopped.
+- Bad arguments, unknown tools or an injected `user_id` go back to the model as error
+  text (it can fix them), never crash the request.
+- After the first turn the loop stays on the model that answered; fallback only ever picks
+  a model that supports tools.
+- The tools used are saved on the answer (`messages.tool_calls`, mode `tool`), every model
+  call is logged in `llm_calls`, and the system prompt includes today's date (for "by Sunday").
+
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` treats every request as the local
 user, so it answers **403** to requests from other machines, and the app refuses to start with
 `ENV=production`. If chat says "The local user is missing", run `python -m scripts.seed`.
@@ -245,6 +261,7 @@ backend/
                        (tools), http.py (/mcp endpoint)
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
+    services/agent.py  the chat's agent loop: MCP tool calls, at most 5 per message (SMA-42)
     services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs

@@ -3,6 +3,7 @@ import { CopyButton } from '@/components/chat/CopyButton'
 import { Markdown } from '@/components/chat/Markdown'
 import { MessageBadges } from '@/components/chat/MessageBadges'
 import { SaveNoteButton } from '@/components/chat/SaveNoteButton'
+import { ToolCalls } from '@/components/chat/ToolCalls'
 import type { ChatMessage } from '@/components/chat/types'
 import { cn } from '@/lib/utils'
 
@@ -36,6 +37,9 @@ export function MessageList({ messages, isThinking = false, onSaveAsNote }: Prop
                 ) : (
                   <>
                     <Markdown>{message.content}</Markdown>
+                    {message.meta?.toolCalls?.length ? (
+                      <ToolCalls calls={message.meta.toolCalls} />
+                    ) : null}
                     <div className="mt-2 flex items-center justify-between gap-2">
                       {message.meta ? <MessageBadges meta={message.meta} /> : <span />}
                       <div className="flex items-center">

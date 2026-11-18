@@ -20,6 +20,7 @@ and what that choice costs us. Code shows *what* we built; ADRs keep *why*, next
 | [0004](0004-capability-aware-fallback.md) | Fallback is filtered by capability; config errors still fall back | Accepted |
 | [0005](0005-httpx2-for-llm-http.md) | Use (and mock) `httpx2`, the HTTP client of the `openai` SDK | Accepted |
 | [0006](0006-database-for-deployment.md) | Turso fails the spike: not adopted; v1.0 stays on SQLite, v1.1 database chosen then | Accepted |
+| [0007](0007-groq-as-default-model.md) | Groq GPT-OSS 120B is the default chat model; Gemini the fallback | Accepted |
 
 ## Template
 

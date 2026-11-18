@@ -342,3 +342,84 @@ def test_fake_capabilities_can_be_configured():
 
     assert fake.supports("tools") is False
     assert fake.model == "fake-no-tools"
+
+
+# --- Tools (SMA-42) -----------------------------------------------------------------
+
+from app.services.llm.base import ToolCall  # noqa: E402
+
+TOOLS = [{"type": "function", "function": {"name": "list_tasks", "parameters": {}}}]
+GEMINI_EXTRA = {"google": {"thought_signature": "EpQDCpEDAWkU"}}
+
+
+def tool_call_completion():
+    """A reply that asks for a tool instead of answering (no text at all)."""
+    body = completion(content=None, finish_reason="tool_calls")
+    body["choices"][0]["message"]["tool_calls"] = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "list_tasks", "arguments": '{"status": "todo"}'},
+            "extra_content": GEMINI_EXTRA,  # Gemini's thinking models add this (SMA-39)
+        }
+    ]
+    return body
+
+
+@pytest.mark.parametrize("provider_cls", ADAPTERS)
+def test_tools_are_sent_when_given_and_not_otherwise(provider_cls):
+    provider, sent = make_provider(provider_cls, lambda r: httpx2.Response(200, json=completion()))
+
+    provider.chat(MESSAGES)
+    provider.chat(MESSAGES, ChatOptions(tools=TOOLS))
+
+    assert "tools" not in json.loads(sent[0].content)
+    assert json.loads(sent[1].content)["tools"] == TOOLS
+
+
+@pytest.mark.parametrize("provider_cls", ADAPTERS)
+def test_a_reply_asking_for_tools_is_not_an_empty_answer(provider_cls):
+    provider, _ = make_provider(
+        provider_cls, lambda r: httpx2.Response(200, json=tool_call_completion())
+    )
+
+    response = provider.chat(MESSAGES, ChatOptions(tools=TOOLS))
+
+    assert response.text == ""
+    assert response.tool_calls == [
+        ToolCall(
+            id="call_1",
+            name="list_tasks",
+            arguments='{"status": "todo"}',
+            extra={"extra_content": GEMINI_EXTRA},  # kept, to be sent back unchanged
+        )
+    ]
+
+
+@pytest.mark.parametrize("provider_cls", ADAPTERS)
+def test_a_plain_answer_has_no_tool_calls(provider_cls):
+    provider, _ = make_provider(provider_cls, lambda r: httpx2.Response(200, json=completion()))
+
+    assert provider.chat(MESSAGES, ChatOptions(tools=TOOLS)).tool_calls == []
+
+
+def test_a_tool_call_goes_back_into_the_history_with_its_extras():
+    call = ToolCall("call_1", "list_tasks", "{}", extra={"extra_content": GEMINI_EXTRA})
+
+    assert call.as_message_part() == {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "list_tasks", "arguments": "{}"},
+        "extra_content": GEMINI_EXTRA,
+    }
+
+
+def test_the_fake_provider_can_ask_for_tools():
+    fake = FakeProvider(replies=[[ToolCall("c1", "list_tasks", "{}")], "Done."])
+
+    first = fake.chat(MESSAGES, ChatOptions(tools=TOOLS))
+    second = fake.chat(MESSAGES, ChatOptions(tools=TOOLS))
+
+    assert (first.text, [c.name for c in first.tool_calls]) == ("", ["list_tasks"])
+    assert (second.text, second.tool_calls) == ("Done.", [])
+    assert fake.options[0].tools == TOOLS

@@ -8,7 +8,7 @@ import time
 import httpx2
 import openai
 
-from app.services.llm.base import ChatOptions, ChatResponse, LLMProvider, Message
+from app.services.llm.base import ChatOptions, ChatResponse, LLMProvider, Message, ToolCall
 from app.services.llm.exceptions import (
     LLMConfigError,
     LLMError,
@@ -16,6 +16,8 @@ from app.services.llm.exceptions import (
     ProviderUnavailableError,
     RateLimitedError,
 )
+
+STANDARD_TOOL_CALL_FIELDS = {"id", "type", "function", "index"}
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -41,6 +43,8 @@ class OpenAICompatibleProvider(LLMProvider):
     def chat(self, messages: list[Message], options: ChatOptions | None = None) -> ChatResponse:
         options = options or ChatOptions()
         extra = {"response_format": {"type": "json_object"}} if options.json_mode else {}
+        if options.tools:
+            extra["tools"] = options.tools  # SMA-42: the model may answer with tool calls
 
         start = time.perf_counter()
         try:
@@ -60,20 +64,35 @@ class OpenAICompatibleProvider(LLMProvider):
         latency_ms = round((time.perf_counter() - start) * 1000)
 
         choice = r.choices[0]
-        if not choice.message.content:
+        tool_calls = self._tool_calls(choice.message)
+        if not choice.message.content and not tool_calls:
             # e.g. a safety block: no text, only a finish_reason. Never show a blank answer.
+            # (No text is normal when the model asks for tools instead.)
             raise LLMError(
                 f"{self.name} returned an empty answer (finish_reason={choice.finish_reason})",
                 self.name,
             )
         return ChatResponse(
-            text=choice.message.content,
+            text=choice.message.content or "",
+            tool_calls=tool_calls,
             tokens_in=r.usage.prompt_tokens if r.usage else 0,
             tokens_out=r.usage.completion_tokens if r.usage else 0,
             model=self.model,
             provider=self.name,
             latency_ms=latency_ms,
         )
+
+    @staticmethod
+    def _tool_calls(message) -> list[ToolCall]:
+        """The tool calls in a reply, with any provider-specific extra fields kept."""
+        calls = []
+        for call in message.tool_calls or []:
+            raw = call.model_dump(exclude_none=True)  # includes fields the SDK doesn't know
+            extra = {k: v for k, v in raw.items() if k not in STANDARD_TOOL_CALL_FIELDS}
+            calls.append(
+                ToolCall(call.id, call.function.name, call.function.arguments, extra or None)
+            )
+        return calls
 
     def _error_from_status(self, e: openai.APIStatusError) -> LLMError:
         """Turn an HTTP error into one of our types (CLAUDE.md: 404 fix config,

@@ -5,11 +5,13 @@ The rest of the app only talks to LLMProvider, so swapping Gemini for Groq
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 Capability = Literal["tools", "json"]
-Message = dict[str, str]  # {"role": "system" | "user" | "assistant", "content": "..."}
+# {"role": "system" | "user" | "assistant" | "tool", "content": "...", ...}. With tools, an
+# assistant message also carries "tool_calls", and a tool message a "tool_call_id" (SMA-42).
+Message = dict[str, Any]
 
 
 @dataclass
@@ -17,6 +19,29 @@ class ChatOptions:
     temperature: float = 0.0
     max_tokens: int = 1024
     json_mode: bool = False  # ask the model to reply with a JSON object
+    # MCP tools offered to the model, in the chat API's "functions" format (SMA-42).
+    tools: list[dict[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """The model asking us to run a tool. It never runs anything itself."""
+
+    id: str  # the result we send back must carry this id
+    name: str
+    arguments: str  # JSON text, exactly as the model wrote it (it may be broken)
+    # Fields outside the OpenAI format, sent back unchanged: Gemini's thinking models
+    # answer 400 without their "thought_signature" (found in SMA-39).
+    extra: dict[str, Any] | None = None
+
+    def as_message_part(self) -> dict[str, Any]:
+        """This call as it goes back into the history, in the assistant message."""
+        part = {
+            "id": self.id,
+            "type": "function",
+            "function": {"name": self.name, "arguments": self.arguments},
+        }
+        return {**part, **(self.extra or {})}
 
 
 @dataclass
@@ -29,6 +54,7 @@ class ChatResponse:
     model: str
     provider: str
     latency_ms: int
+    tool_calls: list[ToolCall] = field(default_factory=list)  # empty = a final answer
 
 
 class LLMProvider(ABC):

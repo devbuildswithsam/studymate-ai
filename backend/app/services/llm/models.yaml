@@ -10,23 +10,24 @@ providers:
     api_key_env: GROQ_API_KEY
 
 models:
-  # MAIN: passed chat, tools and JSON on 13 Nov 2026
-  - id: gemini-3.5-flash
-    provider: gemini
-    display_name: Gemini 3.5 Flash
+  # MAIN since 18 Nov 2026 (SMA-42, ADR-0007): passed chat, tools and JSON, under 1 s
+  - id: openai/gpt-oss-120b
+    provider: groq
+    display_name: GPT-OSS 120B (Groq)
     priority: 1
-    context_window: null      # fill later from the AI Studio model card
+    context_window: null      # fill later from the Groq console Models page
     supports_tools: true
     supports_json: true
     default_for: [chat, study, quiz]
     enabled: true
 
-  # FALLBACK: passed chat, tools and JSON, under 1 s
-  - id: openai/gpt-oss-120b
-    provider: groq
-    display_name: GPT-OSS 120B (Groq)
+  # FALLBACK since 18 Nov 2026: passed chat, tools and JSON on 13 Nov 2026, but timing
+  # out (> 30 s, even without tools) on 18 Nov. Was the main model until SMA-42.
+  - id: gemini-3.5-flash
+    provider: gemini
+    display_name: Gemini 3.5 Flash
     priority: 2
-    context_window: null      # fill later from the Groq console Models page
+    context_window: null      # fill later from the AI Studio model card
     supports_tools: true
     supports_json: true
     default_for: []

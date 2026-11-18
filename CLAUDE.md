@@ -49,7 +49,8 @@ Stay inside the ticket's scope. If something outside it is needed, tell me and s
 ## Rules
 - **Secrets:** `backend/.env` holds API keys. Never print, read aloud, commit or paste them. `.env.example` lists names only.
 - **Model IDs live only in** `backend/app/services/llm/models.yaml` — never in code.
-  Main model: `gemini-3.5-flash`; fallback: Groq `openai/gpt-oss-120b`. `gemini-3.8-flash` disabled (503s).
+  Main model: Groq `openai/gpt-oss-120b`; fallback: `gemini-3.5-flash` (swapped in SMA-42, ADR-0007:
+  Gemini timed out). `gemini-3.8-flash` disabled (503s).
 - Providers are called through the OpenAI-compatible API. Handle 404 (fix config), 429 (wait / fallback),
   503 (retry / fallback) differently.
 - **Every query and MCP tool is scoped by `user_id`**, taken from the request context — never from the

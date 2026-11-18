@@ -12,6 +12,15 @@ export type ChatRequest = {
   allow_fallback?: boolean // SMA-26: false = only the chosen model may answer
 }
 
+/** One tool the AI used for an answer (SMA-42). Same fields as the backend's ToolCallOut. */
+export type ToolCallOut = {
+  name: string // e.g. "create_task"
+  arguments: Record<string, unknown> | string // a string only if the AI sent broken JSON
+  result: string // what the tool sent back to the AI (shortened)
+  is_error: boolean
+  duration_ms: number
+}
+
 /** Same fields as the backend's ChatReply. */
 export type ChatReply = {
   conversation_id: string
@@ -19,7 +28,8 @@ export type ChatReply = {
   reply: string
   provider: string
   model: string
-  mode: 'general'
+  mode: 'general' | 'tool' // 'tool': the AI used tools (SMA-42)
+  tool_calls: ToolCallOut[]
   fallback_used: boolean
   fallback_reason: string | null
   tokens_in: number
