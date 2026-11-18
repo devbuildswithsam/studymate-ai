@@ -594,3 +594,23 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-41 — In-app MCP server at /mcp with a trusted user context
+**Date:** 18 Nov 2026
+
+**What I did**
+- Gave StudyMate its own MCP server at `/mcp`, with tools for tasks and notes (no delete tools), built on the same repositories as the app's pages.
+- Checked it in MCP Inspector: the AI's `create_task` showed up on my Tasks board with the AI marker.
+
+**What I learned**
+- **Identity never comes from the AI.** The AI writes the tool arguments, so a `user_id` there could name anyone. The server works out the user itself and stores it in a `ContextVar` (a per-request variable) before any tool runs; tools read it from there.
+- **Fail closed:** if no user was set, the tools refuse to run instead of guessing.
+- **Reject unknown input, don't ignore it:** MCP 2.x silently ignored an extra `user_id` argument. A small middleware now rejects any argument a tool doesn't declare, so an attack attempt is visible.
+- **Limit what tools return:** at most 50 tasks, 10 notes, short snippets. Big results cost tokens and could leak more than needed.
+- **Startup code runs once per start:** the MCP session manager can only start once, so the app builds a fresh one every time it starts (tests start the app hundreds of times).
+- **Read-only vs. write tools:** marking them now prepares the next step, where changes need the user's confirmation (SMA-43).
+
+**What confused me**
+- …
