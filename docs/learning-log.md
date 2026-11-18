@@ -657,3 +657,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-44 — Documents and chunks tables + validated upload endpoint
+**Date:** 18 Nov 2026
+
+**What I did**
+- Started Stage 4: tables for documents, their text chunks (with embeddings), and which documents a study chat may use.
+- Built the upload endpoint: real PDF / TXT / MD files up to 4 MB are accepted; too big gets 413, a wrong or disguised type gets 415.
+
+**What I learned**
+- **Never trust what the client says about a file:** the name and the Content-Type are both chosen by the sender. The type is decided by the bytes: a PDF starts with `%PDF-` (its "magic bytes"), and text must be valid UTF-8 without NUL bytes.
+- **Read one byte more than the limit** to know a file is too big; reading exactly the limit would silently cut it.
+- **Only keep the file's own name** (`C:\...` and `../..` stripped), and never use it as a path.
+- **Many-to-many** needs a join table (`conversation_documents`): one chat can use many documents, and one document can be in many chats.
+- **Embeddings are stored as bytes:** float32 numbers, 4 bytes each. The database itself checks the length matches `embedding_dim`.
+- **Adding a foreign key to an existing table** rebuilds it in SQLite, and any bad value already there must be cleaned first.
+- **Mutation testing showed four weak spots:** a library already did part of my check, timestamps differed by luck, I had mutated the model instead of the migration, and one test input was invalid in two ways at once.
+
+**What confused me**
+- …
