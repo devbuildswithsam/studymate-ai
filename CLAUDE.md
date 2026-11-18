@@ -18,7 +18,11 @@ build with me one ticket at a time, and explain everything you do.
 - Stage 2 is complete (tag `v0.2`): SQLite + Alembic (migrations tested both ways with data),
   local user with startup guard, chats and messages saved, sidebar with AI titles, Notes,
   two-user isolation suite. Turso failed its spike (ADR-0006): v1.0 stays on SQLite.
-- Next: **Stage 3 (MCP), starting with SMA-36**.
+- Stage 3 is complete (tag `v0.3`): MCP lab, Tasks board, in-app MCP server at `/mcp` with a
+  trusted user context, chat agent loop (max 5 tool calls, "Used tool" lines), write-action
+  policy (read / create / change: confirmation cards, Undo, red-team tests). Groq is the
+  default chat model (ADR-0007).
+- Next: **Stage 4 (documents, RAG, evaluation), starting with SMA-44**.
 - Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
   v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
 

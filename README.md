@@ -3,7 +3,7 @@
 An AI study assistant: chat, ask questions about your PDFs with page citations,
 summaries, quizzes, and study tasks created by the AI through MCP tools.
 
-> **Status:** v1.0 MVP in progress — Stage 2 (database) complete, Stage 3 (MCP) in progress. Built in public.
+> **Status:** v1.0 MVP in progress — Stage 3 (MCP) complete, Stage 4 (documents) next. Built in public.
 > Done so far: backend skeleton (config, health check, CORS, one error format), the LLM
 > provider layer (Gemini + Groq adapters, model registry, automatic fallback),
 > `GET /api/models`, the frontend shell and the **chat page** (Markdown + maths answers,
