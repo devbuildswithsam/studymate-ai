@@ -11,7 +11,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > badges showing which model answered). Stage 2: SQLite database with migrations, the local
 > user, **conversations saved in the database** (they survive a restart), a "Recent chats"
 > sidebar with AI titles, and **Notes** (search, edit, "Save as note" on any AI answer).
-> Stage 3 (MCP): the MCP lab (`mcp_lab/`) and a **Tasks** board (To do / Doing / Done).
+> Stage 3 (MCP): the MCP lab (`mcp_lab/`), a **Tasks** board (To do / Doing / Done), and the
+> app's own **MCP server** at `/mcp` (task and note tools for AI clients).
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -111,6 +112,26 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   `created_by` is always `user` here: only the AI's MCP tools (SMA-41) create `ai` tasks.
 
 Another user's conversation, note or task always answers **404**, the same as one that doesn't exist.
+
+### MCP server (`/mcp`)
+StudyMate's tools for AI clients (guide 7.2), over Streamable HTTP (stateless, plain JSON):
+`create_task`, `list_tasks`, `update_task`, `complete_task`, `save_note`, `search_notes`.
+There are **no delete tools**: deleting happens only through the app's buttons.
+
+- **Who the tools act for** comes only from the server: `/mcp` resolves the user (local mode:
+  the seeded user, requests from this computer only) and stores it in a request-scoped
+  `ContextVar` before any tool runs. No tool has a `user_id` argument, and any argument a
+  tool doesn't declare (e.g. an injected `user_id`) is rejected with JSON-RPC error -32602.
+- Tasks created through MCP get `created_by: "ai"` (the **AI** marker on the board).
+- Limits: at most 50 tasks listed, 10 notes found, 300-character note snippets, 200-character
+  titles, 10,000-character notes.
+
+Try it with MCP Inspector while the API runs (transport **Streamable HTTP**, URL
+`http://127.0.0.1:8000/mcp`):
+
+```bat
+npx @modelcontextprotocol/inspector@2.15.0
+```
 
 Keep `--host 127.0.0.1` (local only): `AUTH_MODE=local` treats every request as the local
 user, so it answers **403** to requests from other machines, and the app refuses to start with
@@ -220,6 +241,8 @@ backend/
     api/               routers: health.py, models.py, conversations.py (CRUD + chat), notes.py, tasks.py
                        (+ deps.py: get_current_user, the only source of user_id)
     repositories/      the only code that queries the database; every lookup takes user_id
+    mcp_server/        the app's MCP server: context.py (who tools act for), server.py
+                       (tools), http.py (/mcp endpoint)
     services/llm/      models.yaml (model registry), LLMProvider + adapters,
                        factory, FallbackManager, FakeProvider
     services/titles.py chat titles: a short AI title, or the first words of the message

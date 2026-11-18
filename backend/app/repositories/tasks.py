@@ -22,11 +22,19 @@ ORDER = (
 )
 
 
-def list_tasks(db: Session, user_id: str, status: str | None = None) -> list[Task]:
+def list_tasks(
+    db: Session,
+    user_id: str,
+    status: str | None = None,
+    due_before: date | None = None,  # SMA-41: list_tasks tool filter
+    limit: int | None = None,
+) -> list[Task]:
     query = select(Task).where(Task.user_id == user_id)
     if status is not None:
         query = query.where(Task.status == status)
-    return list(db.scalars(query.order_by(*ORDER)))
+    if due_before is not None:
+        query = query.where(Task.due_date < due_before)
+    return list(db.scalars(query.order_by(*ORDER).limit(limit)))
 
 
 def get_task(db: Session, user_id: str, task_id: str) -> Task | None:
