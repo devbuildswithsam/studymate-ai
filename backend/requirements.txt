@@ -4,6 +4,7 @@ httpx2==2.16.0
 mcp==2.3.0
 openai==3.50.0
 pydantic-settings==2.16.3
+pypdf==7.1.1  # PDF text extraction (SMA-45)
 python-multipart==0.0.34  # file uploads (SMA-44)
 python-dotenv==1.2.4
 PyYAML==6.0.3

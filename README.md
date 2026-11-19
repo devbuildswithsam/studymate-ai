@@ -298,6 +298,9 @@ backend/
     services/agent.py  the chat's agent loop: MCP tool calls, at most 5 per message (SMA-42)
     services/tool_policy.py, services/actions.py
                        write-action policy: run / hold, cards, confirm, undo (SMA-43)
+    services/rag/      documents (SMA-45): extract.py (pypdf, page by page; scans rejected),
+                       clean.py (hyphens, padding, headers/footers), chunk.py (~800
+                       tokens, 15% overlap, paragraph boundaries, page numbers)
     services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs
