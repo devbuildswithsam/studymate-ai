@@ -17,6 +17,7 @@ export type IngestEvent =
   | { stage: 'extracting'; done?: number; total?: number }
   | { stage: 'chunking' }
   | { stage: 'embedding'; done: number; total: number }
+  | { stage: 'summarizing' } // SMA-50: the summary and key points
   | { stage: 'ready'; document?: DocumentInfo }
   | { stage: 'failed'; error: string; document?: DocumentInfo }
 
@@ -49,6 +50,8 @@ export function progressText(progress: UploadProgress): string {
       return 'Chunking…'
     case 'embedding':
       return `Embedding ${progress.done}/${progress.total} chunks`
+    case 'summarizing':
+      return 'Writing summary…'
     case 'ready':
       return 'Ready'
     case 'failed':

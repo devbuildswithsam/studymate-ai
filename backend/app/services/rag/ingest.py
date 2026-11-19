@@ -1,6 +1,6 @@
 """The ingest pipeline with live progress (guide 7.3 steps 2-6). SMA-47.
 
-    extract -> clean -> chunk -> save chunks -> embed -> ready
+    extract -> clean -> chunk -> save chunks -> embed -> summary (SMA-50) -> ready
 
 `ingest()` is a generator: it YIELDS a small event (a dict) at every step, and the upload
 route streams each one to the browser as it happens ("Extracting page 12/30",
@@ -24,6 +24,7 @@ from app.services.rag.chunk import chunk_pages
 from app.services.rag.clean import clean_pages
 from app.services.rag.embed import EmbeddingFailed, embed_steps, failure_message
 from app.services.rag.extract import NO_TEXT, ExtractionError, extract_steps
+from app.services.summary import SummaryFailed
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +38,11 @@ def ingest(
     document: Document,
     data: bytes,
     make_embedder: Callable[[], EmbeddingProvider],
+    summarize_document: Callable[[Session, Document], None] | None = None,  # SMA-50
 ) -> Iterator[Event]:
     finished = False
     try:
-        yield from _steps(db, document, data, make_embedder)
+        yield from _steps(db, document, data, make_embedder, summarize_document)
         finished = True
     except Exception:  # a bug: log it for us, but never leave the document "processing"
         logger.exception("Ingesting document %s failed", document.id)
@@ -54,7 +56,7 @@ def ingest(
             _fail(db, document, INTERRUPTED)
 
 
-def _steps(db, document, data, make_embedder) -> Generator[Event, None, None]:
+def _steps(db, document, data, make_embedder, summarize_document) -> Generator[Event, None, None]:
     # 1. Extract, page by page.
     yield {"stage": "extracting"}
     try:
@@ -94,7 +96,16 @@ def _steps(db, document, data, make_embedder) -> Generator[Event, None, None]:
         yield {"stage": "failed", "error": document.error}  # embed_steps marked it failed
         return
 
-    # 5. Done. (SMA-50 adds the summary and key points here.)
+    # 5. The summary and key points "in the same job" (guide 7.3). If the AI fails, the
+    # document is still ready (it's searchable): Regenerate can write the summary later.
+    if summarize_document is not None:
+        yield {"stage": "summarizing"}
+        try:
+            summarize_document(db, document)
+        except SummaryFailed:
+            db.rollback()
+
+    # 6. Done.
     document.status = "ready"
     db.commit()
     yield {"stage": "ready"}

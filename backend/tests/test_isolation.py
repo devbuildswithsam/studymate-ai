@@ -133,6 +133,7 @@ ISOLATION_CASES = [
     ("GET", "/api/documents/{document_id}", None),  # SMA-44
     ("DELETE", "/api/documents/{document_id}", None),
     ("POST", "/api/documents/{document_id}/retry", None),  # SMA-46
+    ("POST", "/api/documents/{document_id}/summary", {"style": "short"}),  # SMA-50
 ]
 
 

@@ -47,9 +47,10 @@ function toChatMessage(message: SavedMessage, models: ModelInfo[]): ChatMessage 
 type Props = {
   conversationId?: string // undefined = a new study chat
   pageKey?: string // kept when a new chat moves to its own address (see App.tsx)
+  initialDocuments?: DocumentRef[] // SMA-50: "Chat with this document"
 }
 
-export function StudyPage({ conversationId, pageKey }: Props) {
+export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Props) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [createdId, setCreatedId] = useState<string>()
@@ -57,7 +58,7 @@ export function StudyPage({ conversationId, pageKey }: Props) {
   const conversation = useConversation(chatId, { load: conversationId !== undefined })
   const documents = useDocuments()
   const models = useModels()
-  const [picked, setPicked] = useState<DocumentRef[]>([]) // a new chat's documents
+  const [picked, setPicked] = useState<DocumentRef[]>(initialDocuments) // a new chat's documents
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [shown, setShown] = useState<{ messageId: string; n: number }>()

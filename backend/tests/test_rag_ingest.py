@@ -172,3 +172,49 @@ def test_a_closed_connection_marks_the_document_failed(db_session, user):
     db_session.refresh(document)
     assert document.status == "failed"
     assert "interrupted" in document.error
+
+
+# --- SMA-50: the summary is written in the same job ---------------------------------------------
+
+
+def test_the_summary_is_written_before_ready(db_session, user):
+    document = new_document(db_session, user)
+    summarized = []
+
+    def summarize_document(db, doc):
+        summarized.append(doc.id)
+        doc.summary, doc.key_points = "About heat.", ["Heat flows."]
+        db.commit()
+
+    events = list(
+        ingest(
+            db_session, document, lecture(2), lambda: FakeEmbeddingProvider(), summarize_document
+        )
+    )
+
+    stages = [e["stage"] for e in events]
+    assert stages[-2:] == ["summarizing", "ready"]
+    db_session.refresh(document)
+    assert (document.status, document.summary, document.key_points) == (
+        "ready",
+        "About heat.",
+        ["Heat flows."],
+    )
+    assert summarized == [document.id]
+
+
+def test_a_failed_summary_still_leaves_the_document_ready_and_searchable(db_session, user):
+    from app.services.summary import SummaryFailed
+
+    document = new_document(db_session, user)
+
+    def failing(db, doc):
+        raise SummaryFailed("The AI couldn't write a summary right now. Try again.", [])
+
+    events = list(
+        ingest(db_session, document, lecture(2), lambda: FakeEmbeddingProvider(), failing)
+    )
+
+    assert events[-1]["stage"] == "ready"
+    db_session.refresh(document)
+    assert (document.status, document.summary) == ("ready", None)

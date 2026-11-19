@@ -60,6 +60,11 @@ def client(db_url, db_session):
     # SMA-47: uploads embed their chunks. Every test gets a fake embedder, so no test can
     # ever reach the real API (CLAUDE.md); a test may swap in a failing fake.
     app.dependency_overrides[get_embedder] = lambda: (lambda: FakeEmbeddingProvider())
+    # SMA-50: uploads also ask the chat AI for a summary. Same rule: a fake by default (it
+    # answers with a valid summary); tests that need other answers override it.
+    summary = '{"summary": "A test summary.", "key_points": ["A test key point."]}'
+    default_ai = FallbackManager(get_registry(), lambda m: FakeProvider(replies=[summary]))
+    app.dependency_overrides[get_fallback_manager] = lambda: default_ai
     # client=127.0.0.1: requests come from this computer, like the browser via Vite.
     with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c

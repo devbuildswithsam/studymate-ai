@@ -6,6 +6,7 @@ GET    /api/documents        my documents, newest first
 GET    /api/documents/{id}   one of my documents
 DELETE /api/documents/{id}   delete it (its chunks and chat links too)
 POST   /api/documents/{id}/retry   re-run embedding after a failure (SMA-46)
+POST   /api/documents/{id}/summary regenerate the summary and key points (SMA-50)
 
 The upload is checked (app/services/uploads.py), recorded as "processing", then ingested
 in the same request (app/services/rag/ingest.py). The file itself is never kept: only its
@@ -30,8 +31,10 @@ from app.models import Document
 from app.repositories import documents as repo
 from app.services.llm.embeddings import EmbeddingProvider, get_embedder
 from app.services.llm.exceptions import LLMConfigError
+from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.rag.embed import EmbeddingFailed, embed_document, failure_message
 from app.services.rag.ingest import ingest
+from app.services.summary import Style, SummaryFailed, summarize_document
 from app.services.uploads import MAX_UPLOAD_BYTES, UploadRejected, check_upload
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -71,6 +74,7 @@ def upload_document(
     db: Db,
     settings: Annotated[Settings, Depends(get_settings)],
     embedder: Annotated[Callable[[], EmbeddingProvider], Depends(get_embedder)],
+    manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
 ) -> StreamingResponse:
     """Upload + ingest in one request (guide 7.4). Checks first (413/415/422 as normal
     errors), then the answer is a STREAM: one JSON event per line (NDJSON), e.g.
@@ -91,12 +95,16 @@ def upload_document(
         size_bytes=checked.size_bytes,
     )
     db.commit()
-    stream = ingest_stream(document.id, data, settings.database_url, embedder)
+    stream = ingest_stream(document.id, data, settings.database_url, embedder, manager)
     return StreamingResponse(stream, status_code=201, media_type="application/x-ndjson")
 
 
 def ingest_stream(
-    document_id: str, data: bytes, database_url: str, embedder: Callable[[], EmbeddingProvider]
+    document_id: str,
+    data: bytes,
+    database_url: str,
+    embedder: Callable[[], EmbeddingProvider],
+    manager: FallbackManager,
 ) -> Iterator[str]:
     """Run the pipeline and turn each event into a line of JSON.
 
@@ -105,7 +113,9 @@ def ingest_stream(
     """
     with _session_factory(database_url)() as db:
         document = db.get(Document, document_id)
-        steps = ingest(db, document, data, embedder)
+        steps = ingest(
+            db, document, data, embedder, lambda db_, doc: summarize_document(db_, doc, manager)
+        )
         try:
             for event in steps:
                 if event["stage"] in ("ready", "failed"):  # the end: send the document too
@@ -136,6 +146,7 @@ def retry_document(
     user_id: CurrentUserId,
     db: Db,
     embedder: Annotated[Callable[[], EmbeddingProvider], Depends(get_embedder)],
+    manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
 ) -> DocumentOut:
     document = my_document(db, user_id, document_id)
     if document.status != "failed":
@@ -154,8 +165,38 @@ def retry_document(
     except EmbeddingFailed:
         pass  # embed_document already marked it failed, with the reason
     else:
+        try:  # SMA-50: the summary, as at the end of an upload
+            summarize_document(db, document, manager)
+        except SummaryFailed:
+            db.rollback()
         document.status = "ready"
         db.commit()
+    return document_out(document, has_chunks=True)
+
+
+class SummaryRequest(BaseModel):
+    style: Style = "short"  # "short" or "detailed" (wireframe 6.4)
+
+
+@router.post("/{document_id}/summary", response_model=DocumentOut)
+def regenerate_summary(
+    document_id: str,
+    body: SummaryRequest,
+    user_id: CurrentUserId,
+    db: Db,
+    manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
+) -> DocumentOut:
+    """Write the summary again, in the chosen style (SMA-50). Only on request: viewing a
+    document reads the saved summary and never calls the AI."""
+    document = my_document(db, user_id, document_id)
+    if document.status != "ready":
+        raise HTTPException(
+            409, f"Only a ready document can be summarised (this one is {document.status})."
+        )
+    try:
+        summarize_document(db, document, manager, body.style)
+    except SummaryFailed as e:
+        raise HTTPException(503, str(e)) from e  # the old summary is kept
     return document_out(document, has_chunks=True)
 
 

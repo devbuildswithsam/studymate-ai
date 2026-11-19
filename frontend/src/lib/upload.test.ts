@@ -160,3 +160,9 @@ describe('checkFile (in the browser, before any upload)', () => {
     expect(checkFile(file('empty.txt', 0))).toBe('empty.txt is empty.')
   })
 })
+
+describe('progressText (SMA-50)', () => {
+  it('says the summary is being written', () => {
+    expect(progressText({ stage: 'summarizing' })).toBe('Writing summary…')
+  })
+})

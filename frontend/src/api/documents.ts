@@ -1,7 +1,7 @@
 // Documents (backend: app/api/documents.py). SMA-47.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { apiDelete, apiGet, apiPost } from '@/api/client'
+import { ApiError, apiDelete, apiGet, apiPost } from '@/api/client'
 
 /** Same fields as the backend's DocumentOut. */
 export type DocumentInfo = {
@@ -33,6 +33,29 @@ function useRefreshAfter<T, V>(mutationFn: (variables: V) => Promise<T>) {
   return useMutation({
     mutationFn,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOCUMENTS_KEY }),
+  })
+}
+
+/** One document, with its saved summary (SMA-50): reading it never calls the AI. */
+export function useDocument(id: string) {
+  return useQuery({
+    queryKey: [...DOCUMENTS_KEY, id],
+    queryFn: () => apiGet<DocumentInfo>(`/api/documents/${id}`),
+    retry: (failures, error) =>
+      !(error instanceof ApiError && error.status === 404) && failures < 3,
+  })
+}
+
+/** Ask the AI for a new summary in this style (only on request: SMA-50). */
+export function useRegenerateSummary(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (style: 'short' | 'detailed') =>
+      apiPost<DocumentInfo>(`/api/documents/${id}/summary`, { style }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...DOCUMENTS_KEY, id], updated)
+      return queryClient.invalidateQueries({ queryKey: DOCUMENTS_KEY, exact: true })
+    },
   })
 }
 

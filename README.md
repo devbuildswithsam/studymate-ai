@@ -136,6 +136,11 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   answer with no valid citation left becomes **"Not found in your documents"** (`citations:
   []`). Send `"general": true` to answer from general knowledge instead. A follow-up ("and
   why?") is first rewritten into a standalone question for the search.
+- **Summaries (SMA-50):** at the end of ingestion the AI writes a summary and key points (one
+  JSON answer, checked before it's saved; long documents are sampled into evenly spaced
+  excerpts). They are stored on the document: viewing it never calls the AI.
+  `POST /api/documents/{id}/summary` with `{"style": "short" | "detailed"}` regenerates them
+  on request. If the AI fails, the document is still Ready (and searchable), without a summary.
 - `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)
   is embedded again, continuing where it stopped. One embedding model only, never a fallback:
   `gemini-embedding-2`, 768 float32 numbers per chunk ([ADR-0008](docs/adr/0008-gemini-embedding-2-at-768.md)).
@@ -326,6 +331,7 @@ backend/
                        ingest.py (the pipeline with progress; SMA-47), retrieve.py (top-k
                        by NumPy cosine similarity, scoped to the user BEFORE ranking; SMA-48)
     services/study.py  study answers: sources in tags, citations checked, not-found (SMA-49)
+    services/summary.py summary + key points as checked JSON, excerpts for long documents (SMA-50)
     services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs
