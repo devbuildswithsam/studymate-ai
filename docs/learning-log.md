@@ -698,3 +698,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-46 — EmbeddingProvider with Gemini embeddings and float32 storage
+**Date:** 19 Nov 2026
+
+**What I did**
+- Gave each chunk a vector: an embedding provider (separate from chat), Gemini's `gemini-embedding-2` at 768 numbers per chunk, stored as float32 bytes.
+- Made failure safe: a failed document keeps the batches already done, says what to do, and `POST /api/documents/{id}/retry` continues where it stopped.
+
+**What I learned**
+- **An embedding is a list of numbers that captures meaning:** two sentences about energy conservation scored 0.83, an unrelated one 0.66. Search will rank chunks by that.
+- **Vectors are only comparable within one model and size**, so embeddings have no fallback (unlike chat), and each chunk records its model, size and version.
+- **Normalised vectors** (length 1) make similarity a plain dot product; I picked the model that stays normalised at 768.
+- **Probe the real API before designing:** it showed the 100-texts-per-request limit and how quickly the free tier says 429.
+- **Fakes can't find what you don't know:** a single live call found that Gemini leaves out `"index": 0` (Google omits default values), which crashed code that passed every faked test.
+- **Commit work in steps** so a failure halfway keeps the progress, and a retry does only what's missing.
+- **Reuse through a public method, not by moving code:** my first refactor broke Gemini's overridden error handling; the existing tests caught it straight away.
+
+**What confused me**
+- …
