@@ -127,6 +127,7 @@ ISOLATION_CASES = [
     ("POST", "/api/actions/{action_id}/undo", None),
     ("GET", "/api/documents/{document_id}", None),  # SMA-44
     ("DELETE", "/api/documents/{document_id}", None),
+    ("POST", "/api/documents/{document_id}/retry", None),  # SMA-46
 ]
 
 

@@ -55,12 +55,8 @@ class OpenAICompatibleProvider(LLMProvider):
                 max_tokens=options.max_tokens,
                 **extra,
             )
-        except openai.APITimeoutError as e:  # must come before APIConnectionError (subclass)
-            raise ProviderTimeoutError(f"{self.name} timed out", self.name) from e
-        except openai.APIConnectionError as e:
-            raise ProviderUnavailableError(f"Could not reach {self.name}", self.name) from e
-        except openai.APIStatusError as e:
-            raise self._error_from_status(e) from e
+        except openai.OpenAIError as e:
+            raise self.translate_error(e) from e
         latency_ms = round((time.perf_counter() - start) * 1000)
 
         choice = r.choices[0]
@@ -93,6 +89,17 @@ class OpenAICompatibleProvider(LLMProvider):
                 ToolCall(call.id, call.function.name, call.function.arguments, extra or None)
             )
         return calls
+
+    def translate_error(self, e: openai.OpenAIError) -> LLMError:
+        """Any SDK error -> one of our types. Public: the embedding provider (SMA-46) sends
+        its requests through this adapter's client and reuses this too."""
+        if isinstance(e, openai.APITimeoutError):  # before APIConnectionError: a subclass
+            return ProviderTimeoutError(f"{self.name} timed out", self.name)
+        if isinstance(e, openai.APIConnectionError):
+            return ProviderUnavailableError(f"Could not reach {self.name}", self.name)
+        if isinstance(e, openai.APIStatusError):
+            return self._error_from_status(e)  # subclasses add quirks (Gemini's 400 key)
+        return LLMError(f"{self.name}: {e}", self.name)
 
     def _error_from_status(self, e: openai.APIStatusError) -> LLMError:
         """Turn an HTTP error into one of our types (CLAUDE.md: 404 fix config,

@@ -43,3 +43,14 @@ models:
     supports_json: null
     default_for: []
     enabled: false
+
+# Embeddings: ONE model, never a fallback (vectors of two models can't be compared).
+# Chosen 19 Nov 2026 (SMA-46, ADR-0008): gemini-embedding-2 returns normalised vectors even
+# at 768 numbers (3 KB per chunk instead of 12 KB at the full 3072). Gemini takes at most
+# 100 texts per request, and the free tier rate-limits quickly, so batches stay small.
+embeddings:
+  id: gemini-embedding-2
+  provider: gemini
+  dimensions: 768
+  version: 1      # bump when id or dimensions change: older chunks get re-embedded
+  batch_size: 50

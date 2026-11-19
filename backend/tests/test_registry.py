@@ -92,3 +92,48 @@ def test_load_registry_names_the_file_in_the_error(tmp_path):
 def test_get_unknown_model_raises_key_error():
     with pytest.raises(KeyError, match="not in models.yaml"):
         ModelRegistry.model_validate(VALID).get("nope")
+
+
+# --- Embeddings (SMA-46) -------------------------------------------------------------------
+
+EMBEDDINGS = {
+    "id": "embed-model",
+    "provider": "gemini",
+    "dimensions": 8,
+    "version": 1,
+    "batch_size": 10,
+}
+
+
+def test_the_real_embedding_model_is_gemini_embedding_2_at_768_dimensions():
+    # ADR-0008: normalised vectors at 768 numbers (3 KB per chunk); Gemini allows 100 per batch.
+    embeddings = load_registry().embeddings
+
+    assert (embeddings.id, embeddings.provider, embeddings.dimensions) == (
+        "gemini-embedding-2",
+        "gemini",
+        768,
+    )
+    assert 1 <= embeddings.batch_size <= 100
+
+
+def test_the_embeddings_section_is_optional_for_tests():
+    assert ModelRegistry.model_validate(VALID).embeddings is None
+
+
+@pytest.mark.parametrize(
+    "change, expected_error",
+    [
+        ({"provider": "nope"}, "unknown provider"),
+        ({"batch_size": 101}, "less than or equal to 100"),  # Gemini's hard limit
+        ({"batch_size": 0}, "greater than or equal to 1"),
+        ({"dimensions": 0}, "greater than or equal to 1"),
+        ({"typo": 1}, "Extra inputs are not permitted"),
+    ],
+)
+def test_a_bad_embeddings_section_is_rejected(change, expected_error):
+    data = copy.deepcopy(VALID)
+    data["embeddings"] = {**EMBEDDINGS, **change}
+
+    with pytest.raises(ValidationError, match=expected_error):
+        ModelRegistry.model_validate(data)

@@ -11,7 +11,7 @@ from typing import Literal
 
 import openai
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.config import Settings, get_settings
 from app.services.llm.base import Capability
@@ -43,12 +43,27 @@ class ModelConfig(BaseModel):
         return getattr(self, f"supports_{capability}") is True
 
 
+class EmbeddingConfig(BaseModel):
+    """The ONE embedding model (SMA-46, ADR-0008). Never a fallback: vectors from two
+    models can't be compared, so a document is embedded by one model or not at all."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    provider: str
+    dimensions: int = Field(ge=1)  # numbers per vector (= chunks.embedding_dim)
+    # Bump when id or dimensions change: chunks made by another version are re-embedded.
+    version: int = Field(ge=1)
+    batch_size: int = Field(ge=1, le=100)  # texts per request; Gemini allows at most 100
+
+
 class ModelRegistry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: int
     providers: dict[str, ProviderConfig]
     models: list[ModelConfig]
+    embeddings: EmbeddingConfig | None = None  # optional: chat-only test registries stay short
 
     @model_validator(mode="after")
     def check_models_fit_together(self) -> "ModelRegistry":
@@ -63,6 +78,8 @@ class ModelRegistry(BaseModel):
                 raise ValueError(f"model {m.id!r} uses unknown provider {m.provider!r}")
         if not any(m.enabled for m in self.models):
             raise ValueError("no model is enabled")
+        if self.embeddings and self.embeddings.provider not in self.providers:
+            raise ValueError(f"embeddings use unknown provider {self.embeddings.provider!r}")
         return self
 
     def enabled_models(self) -> list[ModelConfig]:

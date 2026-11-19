@@ -7,7 +7,7 @@ existed (the isolation rule, SMA-34).
 from sqlalchemy import literal_column, select
 from sqlalchemy.orm import Session
 
-from app.models import Document
+from app.models import Chunk, Document
 
 
 def create_document(
@@ -43,3 +43,11 @@ def delete_document(db: Session, user_id: str, document_id: str) -> bool:
     db.delete(document)
     db.flush()
     return True
+
+
+def ids_with_chunks(db: Session, document_ids: list[str]) -> set[str]:
+    """Which of these documents have chunks (one query for a whole list, no N+1)."""
+    if not document_ids:
+        return set()
+    query = select(Chunk.document_id).where(Chunk.document_id.in_(document_ids)).distinct()
+    return set(db.scalars(query))

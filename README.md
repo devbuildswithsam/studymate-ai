@@ -119,6 +119,9 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   Too big → **413**, wrong or disguised type → **415**, empty → 422. Only the file's own
   name is kept (no folders). The file itself is not stored: the document is recorded as
   `processing` until ingestion (SMA-45..47) turns it into text chunks.
+- `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)
+  is embedded again, continuing where it stopped. One embedding model only, never a fallback:
+  `gemini-embedding-2`, 768 float32 numbers per chunk ([ADR-0008](docs/adr/0008-gemini-embedding-2-at-768.md)).
 - `GET /api/documents` (newest first) · `GET / DELETE /api/documents/{id}` — deleting a
   document deletes its chunks and study-chat links; tasks about it are kept, unlinked.
 
@@ -300,7 +303,8 @@ backend/
                        write-action policy: run / hold, cards, confirm, undo (SMA-43)
     services/rag/      documents (SMA-45): extract.py (pypdf, page by page; scans rejected),
                        clean.py (hyphens, padding, headers/footers), chunk.py (~800
-                       tokens, 15% overlap, paragraph boundaries, page numbers)
+                       tokens, 15% overlap, paragraph boundaries, page numbers), embed.py
+                       (vectors in batches, resumable, one model per document; SMA-46)
     services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs
