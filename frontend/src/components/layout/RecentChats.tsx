@@ -109,7 +109,7 @@ function ChatItem({ conversation }: { conversation: ConversationSummary }) {
   return (
     <li className="group flex items-center gap-0.5">
       <NavLink
-        to={`/c/${conversation.id}`}
+        to={conversation.mode === 'study' ? `/study/${conversation.id}` : `/c/${conversation.id}`}
         className={({ isActive }) =>
           cn(
             'min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-sm hover:bg-muted',

@@ -18,6 +18,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > Changes the AI wants to make wait for you as **confirmation cards**; tasks it adds have **Undo**.
 > Stage 4 (documents) started: a **Documents** page uploads PDF / TXT / MD files (max 4 MB) with
 > real progress (upload %, then extracting, chunking and embedding) into searchable chunks.
+> The **Study** page answers questions only from the documents you pick, with page citations
+> (`[1] Physics.pdf p.12`) and a Sources panel, or says "Not found in your documents".
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -126,6 +128,14 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   "total": 30}` … and finally `{"stage": "ready" | "failed", "document": {...}}`. A failure
   (scanned PDF, embedding service busy, even a closed browser) always ends as `failed` with
   a reason, never stuck on `processing`.
+- `POST /api/conversations` with `{"mode": "study", "document_ids": [...]}` starts a **study
+  chat**; `PUT /api/conversations/{id}/documents` changes its documents (SMA-49). Its answers
+  (`mode: "grounded"`) come only from the top 5 chunks of those documents, wrapped in
+  `<source>` tags the model is told are reference material, never instructions. Every
+  `[n]` citation is checked against what was retrieved: unknown numbers are removed, and an
+  answer with no valid citation left becomes **"Not found in your documents"** (`citations:
+  []`). Send `"general": true` to answer from general knowledge instead. A follow-up ("and
+  why?") is first rewritten into a standalone question for the search.
 - `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)
   is embedded again, continuing where it stopped. One embedding model only, never a fallback:
   `gemini-embedding-2`, 768 float32 numbers per chunk ([ADR-0008](docs/adr/0008-gemini-embedding-2-at-768.md)).
@@ -315,6 +325,7 @@ backend/
                        (vectors in batches, resumable, one model per document; SMA-46),
                        ingest.py (the pipeline with progress; SMA-47), retrieve.py (top-k
                        by NumPy cosine similarity, scoped to the user BEFORE ranking; SMA-48)
+    services/study.py  study answers: sources in tags, citations checked, not-found (SMA-49)
     services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs

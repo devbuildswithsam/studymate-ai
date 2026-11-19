@@ -2,7 +2,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import type { AgentAction } from '@/api/actions'
-import type { ChatReply, ToolCallOut } from '@/api/chat'
+import type { ChatReply, Citation, ToolCallOut } from '@/api/chat'
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/api/client'
 
 /** Same fields as the backend's ConversationOut: one row of the sidebar. */
@@ -11,9 +11,13 @@ export type ConversationSummary = {
   title: string | null // null until the AI names it after the first answer
   provider: string | null
   model: string | null // the model this chat last used: reopening it picks it again
+  mode?: 'general' | 'study' // SMA-49: study chats open on the Study page
   created_at: string
   updated_at: string
 }
+
+/** A document a study chat may search (SMA-49). */
+export type DocumentRef = { id: string; filename: string }
 
 /** Same fields as the backend's MessageOut. */
 export type SavedMessage = {
@@ -28,11 +32,15 @@ export type SavedMessage = {
   tokens_out: number | null
   tool_calls?: ToolCallOut[] | null // SMA-42: the tools used for this answer
   actions?: AgentAction[] // SMA-43: confirmation cards and Undo
+  citations?: Citation[] | null // SMA-49: a study answer's sources ([] = not found)
   created_at: string
   fallback_reason?: string | null // only known for answers given while the page is open
 }
 
-export type ConversationDetail = ConversationSummary & { messages: SavedMessage[] }
+export type ConversationDetail = ConversationSummary & {
+  messages: SavedMessage[]
+  documents?: DocumentRef[] // SMA-49: study chats only
+}
 
 // Two separate keys on purpose: refreshing the sidebar list must not refetch the open chat.
 export const LIST_KEY = ['conversation-list'] as const
@@ -111,6 +119,7 @@ export function addTurn(
           tokens_out: reply.tokens_out,
           tool_calls: reply.tool_calls,
           actions: reply.actions,
+          citations: reply.mode === 'grounded' ? reply.citations : null,
           created_at: now,
         },
       ],

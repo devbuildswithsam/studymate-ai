@@ -38,7 +38,16 @@ export async function apiDelete(path: string): Promise<void> {
   }
 }
 
-async function sendJson<T>(method: 'POST' | 'PATCH', path: string, body: unknown): Promise<T> {
+/** PUT: replace something as a whole, e.g. a study chat's documents. SMA-49. */
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>('PUT', path, body)
+}
+
+async function sendJson<T>(
+  method: 'POST' | 'PATCH' | 'PUT',
+  path: string,
+  body: unknown,
+): Promise<T> {
   const response = await fetch(path, {
     method,
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },

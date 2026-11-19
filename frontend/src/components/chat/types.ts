@@ -1,6 +1,6 @@
 // One message in the chat, as the page keeps it. SMA-25, badges SMA-26.
 import type { AgentAction } from '@/api/actions'
-import type { ToolCallOut } from '@/api/chat'
+import type { Citation, ToolCallOut } from '@/api/chat'
 
 export type ChatMessage = {
   id: string
@@ -15,4 +15,6 @@ export type AnswerMeta = {
   fallbackReason: string | null // set when a backup model answered, e.g. "gemini...: rate-limited"
   toolCalls?: ToolCallOut[] // the tools the AI used for this answer (SMA-42)
   actions?: AgentAction[] // its writes: cards to confirm, creates to undo (SMA-43)
+  // SMA-49: a study answer. Citations empty = "Not found in your documents".
+  grounded?: { citations: Citation[] }
 }

@@ -7,15 +7,23 @@ accidentally tell a user that someone else's conversation exists.
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Conversation, LLMCall, Message
+from app.models import Conversation, Document, LLMCall, Message, conversation_documents
 from app.models.common import utcnow
 from app.services.llm.fallback import Attempt
 
 
 def create_conversation(
-    db: Session, user_id: str, *, provider: str | None = None, model: str | None = None
+    db: Session,
+    user_id: str,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    mode: str = "general",
+    documents: list[Document] | None = None,  # SMA-49: what a study chat may search
 ) -> Conversation:
-    conversation = Conversation(user_id=user_id, provider=provider, model=model)
+    conversation = Conversation(
+        user_id=user_id, provider=provider, model=model, mode=mode, documents=documents or []
+    )
     db.add(conversation)
     db.flush()  # sends the INSERT (inside the transaction), so defaults like id are set
     return conversation
@@ -44,7 +52,10 @@ def get_conversation(
     )
     if with_messages:
         # Each message's actions too (SMA-43): one more query for all of them.
-        query = query.options(selectinload(Conversation.messages).selectinload(Message.actions))
+        query = query.options(
+            selectinload(Conversation.messages).selectinload(Message.actions),
+            selectinload(Conversation.documents),  # SMA-49: a study chat's documents
+        )
     return db.scalar(query)
 
 
@@ -133,3 +144,34 @@ def log_llm_calls(
             )
         )
     db.flush()
+
+
+# --- Study chats (SMA-49) -------------------------------------------------------------------
+
+
+def with_documents(db: Session, user_id: str, conversation_id: str) -> Conversation | None:
+    """One of the user's conversations, with its documents loaded (to show or change)."""
+    query = (
+        select(Conversation)
+        .where(Conversation.id == conversation_id, Conversation.user_id == user_id)
+        .options(selectinload(Conversation.documents))
+    )
+    return db.scalar(query)
+
+
+def document_ids_of(db: Session, conversation_id: str) -> list[str]:
+    """The documents a study chat may search (the caller already checked the chat's owner)."""
+    query = select(conversation_documents.c.document_id).where(
+        conversation_documents.c.conversation_id == conversation_id
+    )
+    return list(db.scalars(query))
+
+
+def my_documents(db: Session, user_id: str, document_ids: list[str]) -> list[Document] | None:
+    """These documents, if ALL are the user's own; None if any isn't (or doesn't exist)."""
+    ids = list(dict.fromkeys(document_ids))  # no duplicates
+    if not ids:
+        return []
+    query = select(Document).where(Document.id.in_(ids), Document.user_id == user_id)
+    found = list(db.scalars(query))
+    return found if len(found) == len(ids) else None

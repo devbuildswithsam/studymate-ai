@@ -121,6 +121,7 @@ ISOLATION_CASES = [
     ("DELETE", "/api/conversations/{conversation_id}", None),
     ("POST", "/api/conversations/{conversation_id}/messages", {"message": "hi"}),
     ("POST", "/api/conversations/{conversation_id}/title", None),
+    ("PUT", "/api/conversations/{conversation_id}/documents", {"document_ids": []}),  # SMA-49
     ("GET", "/api/notes/{note_id}", None),
     ("PATCH", "/api/notes/{note_id}", {"title": "Bob was here", "content": "x"}),
     ("DELETE", "/api/notes/{note_id}", None),

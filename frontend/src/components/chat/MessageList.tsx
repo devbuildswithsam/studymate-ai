@@ -5,6 +5,7 @@ import { CopyButton } from '@/components/chat/CopyButton'
 import { Markdown } from '@/components/chat/Markdown'
 import { MessageBadges } from '@/components/chat/MessageBadges'
 import { SaveNoteButton } from '@/components/chat/SaveNoteButton'
+import { GroundedExtras } from '@/components/chat/GroundedExtras'
 import { ToolCalls } from '@/components/chat/ToolCalls'
 import type { ChatMessage } from '@/components/chat/types'
 import { cn } from '@/lib/utils'
@@ -16,9 +17,19 @@ type Props = {
   onSaveAsNote?: (answer: ChatMessage, question: string | undefined) => Promise<unknown>
   // Confirm / Cancel / Undo on the AI's actions (SMA-43).
   onAction?: (action: AgentAction, verb: ActionVerb) => Promise<unknown>
+  // SMA-49, study answers: a citation chip was clicked; "Answer from general knowledge".
+  onCitation?: (messageId: string, n: number) => void
+  onAnswerGenerally?: (question: string) => void
 }
 
-export function MessageList({ messages, isThinking = false, onSaveAsNote, onAction }: Props) {
+export function MessageList({
+  messages,
+  isThinking = false,
+  onSaveAsNote,
+  onAction,
+  onCitation,
+  onAnswerGenerally,
+}: Props) {
   return (
     <div className="flex flex-col gap-4">
       <ol aria-label="Messages" className="flex flex-col gap-4">
@@ -44,6 +55,15 @@ export function MessageList({ messages, isThinking = false, onSaveAsNote, onActi
                     {message.meta?.toolCalls?.length ? (
                       <ToolCalls calls={message.meta.toolCalls} />
                     ) : null}
+                    {message.meta?.grounded && (
+                      <GroundedExtras
+                        messageId={message.id}
+                        citations={message.meta.grounded.citations}
+                        question={messages[index - 1]?.content}
+                        onCitation={onCitation}
+                        onAnswerGenerally={onAnswerGenerally}
+                      />
+                    )}
                     {message.meta?.actions?.length && onAction ? (
                       <ActionCards actions={message.meta.actions} onAction={onAction} />
                     ) : null}

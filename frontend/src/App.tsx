@@ -7,6 +7,7 @@ import { ChatPage } from '@/pages/ChatPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { NotesPage } from '@/pages/NotesPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { StudyPage } from '@/pages/StudyPage'
 import { TasksPage } from '@/pages/TasksPage'
 
 /**
@@ -25,10 +26,21 @@ function ChatRoute() {
   return <ChatPage key={pageKey} pageKey={pageKey} conversationId={conversationId} />
 }
 
+/** The study chat: "/study" is a new one, "/study/:conversationId" a saved one (SMA-49).
+ * Same page-key rule as ChatRoute: a new chat moving to its own address stays on screen. */
+function StudyRoute() {
+  const { conversationId } = useParams()
+  const location = useLocation()
+  const keptKey = (location.state as { pageKey?: string } | null)?.pageKey
+  const pageKey = keptKey ?? conversationId ?? location.key
+  return <StudyPage key={pageKey} pageKey={pageKey} conversationId={conversationId} />
+}
+
 // Pages that exist so far; the rest show a placeholder until their ticket is done.
 const PAGES: Record<string, () => React.JSX.Element> = {
   '/': ChatRoute,
   '/documents': DocumentsPage,
+  '/study': StudyRoute,
   '/notes': NotesPage,
   '/tasks': TasksPage,
 }
@@ -48,6 +60,7 @@ export function AppRoutes() {
           )
         })}
         <Route path="/c/:conversationId" element={<ChatRoute />} />
+        <Route path="/study/:conversationId" element={<StudyRoute />} />
         <Route path="/notes/:noteId" element={<NotesPage />} />
       </Route>
     </Routes>

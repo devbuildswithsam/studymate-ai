@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { MessageList } from '@/components/chat/MessageList'
 import type { AgentAction } from '@/api/actions'
-import type { ToolCallOut } from '@/api/chat'
+import type { Citation, ToolCallOut } from '@/api/chat'
 import type { ChatMessage } from '@/components/chat/types'
 
 const user = (content: string, id = 'u1'): ChatMessage => ({ id, role: 'user', content })
@@ -295,5 +295,58 @@ describe('MessageList AI actions: confirmation cards and Undo (SMA-43)', () => {
     expect(
       within(screen.getByRole('list', { name: 'Tools used' })).getByRole('listitem'),
     ).toHaveTextContent('Used tool: complete_task → waiting for your confirmation')
+  })
+})
+
+describe('MessageList study answers (SMA-49)', () => {
+  const citation = (n: number, page: number | null = 12): Citation => ({
+    n,
+    chunk_id: `c${n}`,
+    document_id: 'd1',
+    filename: 'Physics.pdf',
+    page,
+    text: 'Force equals mass times acceleration.',
+  })
+  const grounded = (citations: Citation[]): ChatMessage => ({
+    id: 'a1',
+    role: 'assistant',
+    content: citations.length ? 'F = ma [1] [2].' : "I couldn't find this in your documents.",
+    meta: { modelName: 'GPT-OSS 120B (Groq)', fallbackReason: null, grounded: { citations } },
+  })
+
+  it('labels a grounded answer "From your documents · n sources" with citation chips', async () => {
+    const onCitation = vi.fn()
+    render(
+      <MessageList
+        messages={[grounded([citation(1), citation(2, null)])]}
+        onCitation={onCitation}
+      />,
+    )
+
+    expect(screen.getByText('From your documents · 2 sources')).toBeInTheDocument()
+    expect(screen.queryByText('General AI')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '[1] Physics.pdf p.12' }))
+    expect(onCitation).toHaveBeenCalledWith('a1', 1)
+    expect(screen.getByRole('button', { name: '[2] Physics.pdf' })).toBeInTheDocument() // no page
+  })
+
+  it('says "1 source", not "1 sources"', () => {
+    render(<MessageList messages={[grounded([citation(1)])]} />)
+
+    expect(screen.getByText('From your documents · 1 source')).toBeInTheDocument()
+  })
+
+  it('shows the not-found notice with a button to answer from general knowledge', async () => {
+    const onAnswerGenerally = vi.fn()
+    render(
+      <MessageList
+        messages={[user('Who won the 1998 World Cup?', 'u1'), grounded([])]}
+        onAnswerGenerally={onAnswerGenerally}
+      />,
+    )
+
+    expect(screen.getByText('Not found in your documents')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Answer from general knowledge' }))
+    expect(onAnswerGenerally).toHaveBeenCalledWith('Who won the 1998 World Cup?')
   })
 })

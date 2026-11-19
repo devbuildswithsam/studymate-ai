@@ -20,7 +20,7 @@ from typing import Annotated, Any, Literal
 
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
 from app.api.actions import ActionOut
@@ -37,6 +37,7 @@ from app.services.llm.embeddings import EmbeddingProvider, get_embedder
 from app.services.llm.exceptions import AllModelsFailedError, LLMConfigError
 from app.services.llm.fallback import Attempt, FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
+from app.services.study import StudyError, answer_from_documents
 from app.services.titles import generate_title
 from app.services.tool_policy import asks_to_act
 
@@ -76,6 +77,31 @@ Registry = Annotated[ModelRegistry, Depends(get_registry)]
 
 class ConversationCreate(BaseModel):
     model: str | None = None  # a model id from models.yaml; None = the chat default
+    # SMA-49: "study" = answers come from these documents, with citations.
+    mode: Literal["general", "study"] = "general"
+    document_ids: Annotated[list[str], Field(max_length=20)] = []
+
+
+class DocumentsChange(BaseModel):
+    document_ids: Annotated[list[str], Field(max_length=20)]
+
+
+class DocumentRef(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    filename: str
+
+
+class CitationOut(BaseModel):
+    """One source an answer cites (SMA-49): "[1] Physics.pdf, p.12" and the chunk itself."""
+
+    n: int  # the number used in the answer: [1]
+    chunk_id: str
+    document_id: str
+    filename: str
+    page: int | None  # None for TXT / MD
+    text: str
 
 
 class ConversationRename(BaseModel):
@@ -90,8 +116,13 @@ class ConversationOut(BaseModel):
     title: str | None
     provider: str | None
     model: str | None
+    mode: str = "general"  # SMA-49: "study" chats open on the Study page
     created_at: datetime
     updated_at: datetime
+
+
+class StudyConversationOut(ConversationOut):
+    documents: list[DocumentRef] = []  # SMA-49: what a study chat may search
 
 
 class ToolCallOut(BaseModel):
@@ -119,10 +150,11 @@ class MessageOut(BaseModel):
     tokens_out: int | None
     tool_calls: list[ToolCallOut] | None = None  # SMA-42
     actions: list[ActionOut] = []  # SMA-43: confirmation cards and Undo buttons
+    citations: list[CitationOut] | None = None  # SMA-49: a study answer's sources
     created_at: datetime
 
 
-class ConversationDetail(ConversationOut):
+class ConversationDetail(StudyConversationOut):
     messages: list[MessageOut]
 
 
@@ -134,6 +166,8 @@ class SendMessage(BaseModel):
     model: str | None = None  # switch this conversation to another model
     provider: str | None = None  # optional cross-check: must match the model's provider
     allow_fallback: bool = True  # False: only the chosen model may answer (SMA-26)
+    # SMA-49, study chats: "Answer from general knowledge" (no documents, labelled General).
+    general: bool = False
 
 
 class ChatReply(BaseModel):
@@ -142,8 +176,10 @@ class ChatReply(BaseModel):
     reply: str
     provider: str  # who actually answered (may differ from the request after a fallback)
     model: str
-    mode: Literal["general", "tool"] = MODE  # "tool": the AI used MCP tools (SMA-42)
+    # "tool": the AI used MCP tools (SMA-42); "grounded": from the documents (SMA-49)
+    mode: Literal["general", "tool", "grounded"] = MODE
     tool_calls: list[ToolCallOut] = []
+    citations: list[CitationOut] = []  # SMA-49: empty on a grounded answer = not found
     actions: list[ActionOut] = []  # SMA-43: cards to confirm, creates to undo
     fallback_used: bool
     fallback_reason: str | None
@@ -159,7 +195,7 @@ def list_conversations(user_id: CurrentUserId, db: Db) -> list[Conversation]:
     return repo.list_conversations(db, user_id)
 
 
-@router.post("", response_model=ConversationOut, status_code=201)
+@router.post("", response_model=StudyConversationOut, status_code=201)
 def create_conversation(
     body: ConversationCreate, user_id: CurrentUserId, db: Db, registry: Registry
 ) -> Conversation:
@@ -169,7 +205,24 @@ def create_conversation(
         user_id,
         provider=model.provider if model else None,
         model=model.id if model else None,
+        mode=body.mode,
+        documents=my_documents(db, user_id, body.document_ids),
     )
+    db.commit()
+    return conversation
+
+
+@router.put("/{conversation_id}/documents", response_model=StudyConversationOut)
+def set_documents(
+    conversation_id: str, body: DocumentsChange, user_id: CurrentUserId, db: Db
+) -> Conversation:
+    """Choose which documents a study chat may search (SMA-49)."""
+    conversation = repo.with_documents(db, user_id, conversation_id)
+    if conversation is None:
+        raise HTTPException(404, "Conversation not found")
+    if conversation.mode != "study":
+        raise HTTPException(400, "Only a study chat has documents.")
+    conversation.documents = my_documents(db, user_id, body.document_ids)
     db.commit()
     return conversation
 
@@ -214,6 +267,10 @@ def send_message(
 ) -> ChatReply:
     conversation = my_conversation(db, user_id, conversation_id)
     model_id = choose_model(request, conversation, registry)
+    if conversation.mode == "study" and not request.general:
+        return study_answer(
+            db, user_id, conversation, request, model_id, registry, manager, embedder
+        )
     # SMA-42: a model that can call tools gets the app's MCP tools (only those models).
     uses_tools = model_id is not None and registry.get(model_id).supports("tools")
 
@@ -285,6 +342,79 @@ def send_message(
         tokens_in=outcome.tokens_in,
         tokens_out=outcome.tokens_out,
     )
+
+
+# --- Study chats: answers from the documents (SMA-49) ---------------------------------
+
+
+def study_answer(
+    db, user_id, conversation, request, model_id, registry, manager, embedder
+) -> ChatReply:
+    """A study chat's answer: grounded in its documents, citations checked (study.py)."""
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in repo.recent_messages(db, user_id, conversation.id, MAX_HISTORY_MESSAGES)
+    ]
+    try:
+        answer = answer_from_documents(
+            db,
+            user_id,
+            repo.document_ids_of(db, conversation.id),
+            request.message,
+            history,
+            manager,
+            model_id,
+            request.allow_fallback,
+            embedder,
+        )
+    except StudyError as e:
+        raise HTTPException(e.status, e.message) from e
+    except AllModelsFailedError as e:
+        repo.log_llm_calls(db, user_id, conversation.id, e.attempts, "grounded")
+        db.commit()
+        raise HTTPException(503, f"The AI is unavailable right now ({e})") from e
+    except LLMConfigError as e:
+        raise HTTPException(400, str(e)) from e
+
+    if request.model:  # the user switched models: remember it for this conversation
+        conversation.provider, conversation.model = registry.get(model_id).provider, model_id
+    repo.add_message(db, conversation, role="user", content=request.message)
+    saved = repo.add_message(
+        db,
+        conversation,
+        role="assistant",
+        content=answer.text,
+        provider=answer.response.provider,
+        model=answer.response.model,
+        mode="grounded",
+        fallback_used=answer.fallback_used,
+        tokens_in=answer.tokens_in,
+        tokens_out=answer.tokens_out,
+        citations=answer.citations,  # [] = "Not found in your documents"
+    )
+    repo.log_llm_calls(db, user_id, conversation.id, answer.attempts, "grounded")
+    db.commit()
+    return ChatReply(
+        conversation_id=conversation.id,
+        message_id=saved.id,
+        reply=answer.text,
+        provider=answer.response.provider,
+        model=answer.response.model,
+        mode="grounded",
+        citations=[CitationOut(**c) for c in answer.citations],
+        fallback_used=answer.fallback_used,
+        fallback_reason=answer.fallback_reason,
+        tokens_in=answer.tokens_in,
+        tokens_out=answer.tokens_out,
+    )
+
+
+def my_documents(db: Session, user_id: str, document_ids: list[str]):
+    """The user's own documents, or 404 (also when one is someone else's: reveals nothing)."""
+    documents = repo.my_documents(db, user_id, document_ids)
+    if documents is None:
+        raise HTTPException(404, "Document not found")
+    return documents
 
 
 # --- Asking the model (with or without tools) ----------------------------------------

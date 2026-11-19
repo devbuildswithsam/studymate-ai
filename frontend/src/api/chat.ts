@@ -11,6 +11,17 @@ export type ChatRequest = {
   conversation_id?: string
   model?: string
   allow_fallback?: boolean // SMA-26: false = only the chosen model may answer
+  general?: boolean // SMA-49, study chats: "Answer from general knowledge"
+}
+
+/** One source a study answer cites (SMA-49). Same fields as the backend's CitationOut. */
+export type Citation = {
+  n: number // the number in the answer: [1]
+  chunk_id: string
+  document_id: string
+  filename: string
+  page: number | null // null for TXT / MD
+  text: string // the chunk the answer came from
 }
 
 /** One tool the AI used for an answer (SMA-42). Same fields as the backend's ToolCallOut. */
@@ -30,9 +41,10 @@ export type ChatReply = {
   reply: string
   provider: string
   model: string
-  mode: 'general' | 'tool' // 'tool': the AI used tools (SMA-42)
+  mode: 'general' | 'tool' | 'grounded' // 'tool': used tools (SMA-42); 'grounded': documents (SMA-49)
   tool_calls: ToolCallOut[]
   actions: AgentAction[] // SMA-43: cards to confirm, creates to undo
+  citations: Citation[] // SMA-49: empty on a grounded answer = not found
   fallback_used: boolean
   fallback_reason: string | null
   tokens_in: number
@@ -47,13 +59,16 @@ type Conversation = { id: string }
  * onConversationCreated: called as soon as a new conversation exists, BEFORE the AI
  * answers, so a failed answer can be retried in the same conversation.
  */
-export function useSendMessage(onConversationCreated?: (id: string) => void) {
+export function useSendMessage(
+  onConversationCreated?: (id: string) => void,
+  newConversation: object = {}, // SMA-49: e.g. { mode: 'study', document_ids: [...] }
+) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ conversation_id, ...body }: ChatRequest) => {
       let id = conversation_id
       if (!id) {
-        id = (await apiPost<Conversation>('/api/conversations', {})).id
+        id = (await apiPost<Conversation>('/api/conversations', newConversation)).id
         onConversationCreated?.(id)
       }
       return apiPost<ChatReply>(`/api/conversations/${id}/messages`, body)

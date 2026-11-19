@@ -183,7 +183,7 @@ def count_queries(db_session) -> list[str]:
 
 
 @pytest.mark.parametrize("message_count", [2, 20])
-def test_a_conversation_with_messages_loads_in_three_queries(db_session, alice, message_count):
+def test_a_conversation_with_messages_loads_in_four_queries(db_session, alice, message_count):
     conversation = repo.create_conversation(db_session, alice.id)
     add_messages(db_session, conversation, *["x"] * message_count)
     db_session.commit()
@@ -196,9 +196,9 @@ def test_a_conversation_with_messages_loads_in_three_queries(db_session, alice, 
 
     assert len(contents) == message_count
     assert actions == []
-    # The conversation, all its messages at once, all their actions at once: the same 3
-    # for 2 or 20 messages (never one query per message: N+1).
-    assert len(statements) == 3
+    # The conversation, all its messages at once, all their actions at once, and its
+    # documents (SMA-49): the same 4 for 2 or 20 messages (never one per message: N+1).
+    assert len(statements) == 4
 
 
 # --- llm_calls ---------------------------------------------------------------------
