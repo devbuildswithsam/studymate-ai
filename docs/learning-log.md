@@ -719,3 +719,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-47 — Ingest pipeline with real progress + Documents page
+**Date:** 19 Nov 2026
+
+**What I did**
+- Joined the pieces of SMA-44..46: uploading a file now extracts, cleans, chunks and embeds it in the same request, and the Documents page shows each step live (Uploading 45% → Extracting page 12/30 → Chunking → Embedding 18/30 chunks → Ready).
+- Checked it in the browser with a 30-page PDF, plus the 4 MB / type checks and Delete.
+
+**What I learned**
+- **Generators make progress easy:** a function that `yield`s an event at each step can be streamed to the browser as it runs; `result = yield from step()` passes the step's progress up and still gets its return value.
+- **Streaming HTTP:** the server sends one JSON object per line (NDJSON) and keeps the connection open; the browser reads the lines as they arrive. The work runs after the route returns, so it needs its own database session.
+- **XHR vs fetch:** only `XMLHttpRequest` can report how much of an upload has been sent.
+- **Never leave work half-done in the database:** a `finally` block marks the document failed even when the browser disconnects.
+- **Check the real path, not just tests:** I ran the stream through Vite's proxy to be sure it isn't buffered.
+- **Mutation testing found redundant code** (two handlers doing the same job) and **a missing test** (adding a file while another uploads).
+- **Two test traps:** a function returned from `beforeEach` runs as cleanup; and a test PDF with the same line on every page loses it as a "header".
+
+**What confused me**
+- …
