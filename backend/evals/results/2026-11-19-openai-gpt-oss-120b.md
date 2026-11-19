@@ -57,15 +57,16 @@
 
 Read each answer: is the scored result right? Tick or note what's wrong.
 
-- [ ] **fr-05** Which three men formed the Consulate after the coup of 18 Brumaire?<br>
+- [x] **fr-05** Which three men formed the Consulate after the coup of 18 Brumaire?<br>
   → The Consulate was created with three members: **Napoleon Bonaparte, Emmanuel Joseph Sieyès, and Roger Ducos** [1].
-- [ ] **fr-10** What did the Phrygian cap, or Liberty cap, symbolise during the Revolution?<br>
+- [x] **fr-10** What did the Phrygian cap, or Liberty cap, symbolise during the Revolution?<br>
   → The Phrygian (Liberty) cap was used as a symbol of **Roman republicanism and liberty**, evoking the ancient Roman ritual of manumission in which a freed slave received the cap as a sign of his newly‑won freedom [2].
-- [ ] **th-03** Why was the zeroth law given that name instead of being numbered after the others?<br>
+- [x] **th-03** Why was the zeroth law given that name instead of being numbered after the others?<br>
   → I couldn't find this in your documents.
-- [ ] **ph-01** Why do most plants look green?<br>
-  → Most plants appear green because their primary photosynthetic pigment, chlorophyll, absorbs light most strongly in the red and blue regions of the spectrum while reflecting and transmitting green wavelengths. The reflected green light is what we see, giving plants their characteristic green color [1].
-- [ ] **ph-06** How old are the fossils thought to be of filamentous photosynthetic organisms?<br>
+- [x] **ph-01** Why do most plants look green?<br>
+  → Most plants appear green because their primary photosynthetic pigment, chlorophyll, absorbs light most strongly in the red and blue regions of the spectrum while reflecting and transmitting green wavelengths. The reflected green light is what we see, giving plants their characteristic green color [1].<br>
+  ⚠️ Hand check: the citation score (0/1) is too strict. Page 1 also says chlorophylls absorb red and blue, "thus reflecting green"; the case lists only page 4. Fix the case (pages [1, 4]) before the next run.
+- [x] **ph-06** How old are the fossils thought to be of filamentous photosynthetic organisms?<br>
   → I couldn't find this in your documents.
-- [ ] **tool-03** Save a note titled Carnot cycle that says it is the most efficient heat engine cycle<br>
+- [x] **tool-03** Save a note titled Carnot cycle that says it is the most efficient heat engine cycle<br>
   → Your note titled **“Carnot cycle”** has been saved. Let me know if you’d like to add anything else, tag it, or retrieve it later!

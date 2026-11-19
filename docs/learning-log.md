@@ -801,3 +801,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-51 — Evaluation harness: 30 cases, deterministic scoring, first results
+**Date:** 19 Nov 2026
+
+**What I did**
+- Wrote a test set of 30 questions on three public Wikipedia PDFs: 22 answerable (with key facts and pages), 5 "not in the documents", 3 tool requests.
+- Built `python -m evals.run --provider --model`: it runs every case through the app's own code and writes a CSV and a Markdown summary per model.
+- Ran it for both models and committed the results. GPT-OSS 120B: 17/22 correct, 0 wrong answers, refusals 5/5, tools 3/3, p95 3.7 s, Stage 4 check 9/10. Gemini 3.5 Flash: unusable on the free tier (timeouts, 503, 429).
+- Hand-checked every 5th case: 11 of 12 scores right; ph-01's case is missing page 1.
+
+**What I learned**
+- **Evaluation is how you know an AI feature works:** tests prove the code is right; an eval measures how good the model's answers are, with numbers you can compare between runs and models.
+- **Deterministic scoring:** key facts, pages and refusals are checked by plain code, so the same answer always gets the same score. An LLM judge can only be an extra signal.
+- **Measure retrieval separately (hit@5, MRR):** 3 of the 5 misses happened because the right page never reached the model, so retrieval is the first thing to improve.
+- **The failure mode matters:** every GPT-OSS miss was "not found", never a made-up answer, which is the safe way to fail for a study tool.
+- **Keep the baseline honest:** don't edit the test set after seeing the scores; record problems (like ph-01) and fix them before the next run.
+- **Hand checks catch mistakes in the test set itself,** not only in the model.
+- **Free tiers are part of the result:** quotas, 503s and timeouts are real failures and get labelled, not hidden.
+
+**What confused me**
+- …
