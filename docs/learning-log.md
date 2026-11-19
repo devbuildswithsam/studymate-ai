@@ -760,3 +760,23 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-49 — Study chat: grounded answers, validated citations, grounded/not-found labels
+**Date:** 19 Nov 2026
+
+**What I did**
+- Built the Study page: pick documents, ask, and get answers only from them, with page citations ("[1] Physics.pdf p.12"), a Sources panel showing the quoted text, or an honest "Not found in your documents" with a button to answer from general knowledge.
+- Checked it in the browser with my own PDF: right pages cited, and a World Cup question correctly not found.
+
+**What I learned**
+- **Grounding = giving the model the sources and strict rules:** answer only from them, cite [n], and say NOT_FOUND otherwise.
+- **Never trust the model's citations blindly:** the backend checks every number against what was really retrieved; an answer with no valid citation is treated as a guess and not shown as grounded.
+- **Delimiters against prompt injection:** source text goes inside `<source>` tags the model is told are reference material, and a `</source>` hidden in a document is neutralised so it can't break out.
+- **Follow-ups need context for the search:** "and who was its king then?" is rewritten into a full question before searching; the answer still uses the real question.
+- **Test with the real model, not only fakes:** GPT-OSS writes citations as 【1】, not [1]. Every fake test passed while real, correct answers were being hidden. One live run found it.
+- **Mutation testing can simplify code:** the explicit NOT_FOUND check was already covered by "no valid citation", so it went.
+
+**What confused me**
+- …
