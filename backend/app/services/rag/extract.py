@@ -10,7 +10,9 @@ so it is rejected with a clear message instead of becoming an empty document.
 
 import io
 import logging
+from collections.abc import Generator
 from dataclasses import dataclass
+from typing import Any
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -42,9 +44,22 @@ class Extracted:
     page_count: int | None  # every page of a PDF, with or without text; None for TXT / MD
 
 
+PageProgress = tuple[int, int]  # (pages done, pages in total)
+
+
 def extract_pages(data: bytes, mime_type: str) -> Extracted:
+    """All at once, without progress (tests and simple callers)."""
+    return run_to_end(extract_steps(data, mime_type))
+
+
+def extract_steps(data: bytes, mime_type: str) -> Generator[PageProgress, None, Extracted]:
+    """Yields (page, pages) after each PDF page, then RETURNS the result (SMA-47).
+
+    The ingest pipeline uses `extracted = yield from extract_steps(...)`: each progress
+    tuple goes straight to the browser, and the return value lands in `extracted`.
+    """
     if mime_type == "application/pdf":
-        extracted = _pdf_pages(data)
+        extracted = yield from _pdf_pages(data)
     else:
         text = data.decode("utf-8-sig")  # -sig: drops Notepad's byte order mark
         extracted = Extracted([Page(None, text)], None)
@@ -54,19 +69,30 @@ def extract_pages(data: bytes, mime_type: str) -> Extracted:
     return extracted
 
 
-def _pdf_pages(data: bytes) -> Extracted:
+def _pdf_pages(data: bytes) -> Generator[PageProgress, None, Extracted]:
     try:
         reader = PdfReader(io.BytesIO(data))
         # Some PDFs are "encrypted" with an empty password: those open fine.
         if reader.is_encrypted and not reader.decrypt(""):
             raise ExtractionError("This PDF is password-protected. Remove the password first.")
         pages = []
+        total = len(reader.pages)
         for number, page in enumerate(reader.pages, start=1):
             text = page.extract_text(extraction_mode="layout")
             if text.strip():
                 pages.append(Page(number, text))
-        return Extracted(pages, len(reader.pages))
+            yield (number, total)
+        return Extracted(pages, total)
     except ExtractionError:
         raise
     except (PdfReadError, ValueError, KeyError) as e:  # broken files fail in many ways
         raise ExtractionError("This PDF can't be read: it may be damaged.") from e
+
+
+def run_to_end[T](steps: Generator[Any, None, T]) -> T:
+    """Run a step generator, ignoring its progress, and return its result."""
+    while True:
+        try:
+            next(steps)
+        except StopIteration as finished:
+            return finished.value

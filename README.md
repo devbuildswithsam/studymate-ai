@@ -16,6 +16,8 @@ summaries, quizzes, and study tasks created by the AI through MCP tools.
 > uses those tools**: "Add a task … by Sunday" creates it, with "Used tool: …" lines under
 > the answer. Default chat model: Groq GPT-OSS 120B, Gemini as fallback ([ADR-0007](docs/adr/0007-groq-as-default-model.md)).
 > Changes the AI wants to make wait for you as **confirmation cards**; tasks it adds have **Undo**.
+> Stage 4 (documents) started: a **Documents** page uploads PDF / TXT / MD files (max 4 MB) with
+> real progress (upload %, then extracting, chunking and embedding) into searchable chunks.
 > v1.0 is **local and single-user only**: don't deploy it publicly before auth (v1.1).
 
 ## Tech stack
@@ -117,8 +119,13 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   at most 4 MB**. The type is decided by the file's **content** (a PDF must start with
   `%PDF-`; TXT/MD must be UTF-8 text), never by its name or the browser's Content-Type.
   Too big → **413**, wrong or disguised type → **415**, empty → 422. Only the file's own
-  name is kept (no folders). The file itself is not stored: the document is recorded as
-  `processing` until ingestion (SMA-45..47) turns it into text chunks.
+  name is kept (no folders). The file itself is never stored, only its text chunks and vectors.
+  After the checks, the same request **ingests** the file (extract → clean → chunk → embed) and
+  answers with a **stream of progress events**, one JSON object per line (NDJSON, SMA-47):
+  `{"stage": "extracting", "done": 12, "total": 30}` … `{"stage": "embedding", "done": 18,
+  "total": 30}` … and finally `{"stage": "ready" | "failed", "document": {...}}`. A failure
+  (scanned PDF, embedding service busy, even a closed browser) always ends as `failed` with
+  a reason, never stuck on `processing`.
 - `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)
   is embedded again, continuing where it stopped. One embedding model only, never a fallback:
   `gemini-embedding-2`, 768 float32 numbers per chunk ([ADR-0008](docs/adr/0008-gemini-embedding-2-at-768.md)).

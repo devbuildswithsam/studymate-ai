@@ -1,31 +1,37 @@
 """Documents: upload, list, open, delete (guide 7.3, wireframe 6.3). SMA-44.
 
-POST   /api/documents        upload one PDF / TXT / MD file (multipart, field "file")
+POST   /api/documents        upload one PDF / TXT / MD file (multipart, field "file") and
+                             ingest it, streaming progress events (SMA-47)
 GET    /api/documents        my documents, newest first
 GET    /api/documents/{id}   one of my documents
 DELETE /api/documents/{id}   delete it (its chunks and chat links too)
 POST   /api/documents/{id}/retry   re-run embedding after a failure (SMA-46)
 
-The upload is checked (app/services/uploads.py) and recorded as "processing". The file
-itself is not kept: SMA-45/47 turn it into text chunks within this same request.
+The upload is checked (app/services/uploads.py), recorded as "processing", then ingested
+in the same request (app/services/rag/ingest.py). The file itself is never kept: only its
+text chunks and their vectors.
 The user comes only from get_current_user_id. Another user's document answers 404.
 """
 
-from collections.abc import Callable
+import json
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
-from app.db.session import get_db
+from app.config import Settings, get_settings
+from app.db.session import _session_factory, get_db
 from app.models import Document
 from app.repositories import documents as repo
 from app.services.llm.embeddings import EmbeddingProvider, get_embedder
 from app.services.llm.exceptions import LLMConfigError
 from app.services.rag.embed import EmbeddingFailed, embed_document, failure_message
+from app.services.rag.ingest import ingest
 from app.services.uploads import MAX_UPLOAD_BYTES, UploadRejected, check_upload
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -58,8 +64,18 @@ def document_out(document: Document, has_chunks: bool) -> DocumentOut:
     return out
 
 
-@router.post("", response_model=DocumentOut, status_code=201)
-def upload_document(file: UploadFile, user_id: CurrentUserId, db: Db) -> Document:
+@router.post("", status_code=201, response_class=StreamingResponse)
+def upload_document(
+    file: UploadFile,
+    user_id: CurrentUserId,
+    db: Db,
+    settings: Annotated[Settings, Depends(get_settings)],
+    embedder: Annotated[Callable[[], EmbeddingProvider], Depends(get_embedder)],
+) -> StreamingResponse:
+    """Upload + ingest in one request (guide 7.4). Checks first (413/415/422 as normal
+    errors), then the answer is a STREAM: one JSON event per line (NDJSON), e.g.
+    {"stage": "extracting", "done": 12, "total": 30} ... {"stage": "ready", "document": {...}}.
+    """
     # Read one byte MORE than allowed: if we get it, the file is too big. Reading only
     # up to the limit would silently cut the file instead.
     data = file.file.read(MAX_UPLOAD_BYTES + 1)
@@ -75,7 +91,30 @@ def upload_document(file: UploadFile, user_id: CurrentUserId, db: Db) -> Documen
         size_bytes=checked.size_bytes,
     )
     db.commit()
-    return document
+    stream = ingest_stream(document.id, data, settings.database_url, embedder)
+    return StreamingResponse(stream, status_code=201, media_type="application/x-ndjson")
+
+
+def ingest_stream(
+    document_id: str, data: bytes, database_url: str, embedder: Callable[[], EmbeddingProvider]
+) -> Iterator[str]:
+    """Run the pipeline and turn each event into a line of JSON.
+
+    It runs AFTER the route has returned, while the response is being sent, so it opens its
+    own database session instead of borrowing the request's.
+    """
+    with _session_factory(database_url)() as db:
+        document = db.get(Document, document_id)
+        steps = ingest(db, document, data, embedder)
+        try:
+            for event in steps:
+                if event["stage"] in ("ready", "failed"):  # the end: send the document too
+                    has_chunks = bool(repo.ids_with_chunks(db, [document.id]))
+                    out = document_out(document, has_chunks).model_dump(mode="json")
+                    event = {**event, "document": out}
+                yield json.dumps(event) + "\n"
+        finally:
+            steps.close()  # if the browser left early: ingest marks the document failed
 
 
 @router.get("", response_model=list[DocumentOut])

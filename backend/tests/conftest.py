@@ -10,7 +10,8 @@ from app.config import BACKEND_DIR, Settings, get_settings
 from app.db.seed import ensure_local_user
 from app.db.session import make_engine
 from app.main import app
-from app.services.llm.fake import FakeProvider
+from app.services.llm.embeddings import get_embedder
+from app.services.llm.fake import FakeEmbeddingProvider, FakeProvider
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import get_registry
 from tests.tool_helpers import REGISTRY as TOOL_REGISTRY
@@ -56,6 +57,9 @@ def client(db_url, db_session):
     settings = settings_for_tests(db_url)
     # Dependency injection pays off: swap get_settings for the test version.
     app.dependency_overrides[get_settings] = lambda: settings
+    # SMA-47: uploads embed their chunks. Every test gets a fake embedder, so no test can
+    # ever reach the real API (CLAUDE.md); a test may swap in a failing fake.
+    app.dependency_overrides[get_embedder] = lambda: (lambda: FakeEmbeddingProvider())
     # client=127.0.0.1: requests come from this computer, like the browser via Vite.
     with TestClient(app, client=("127.0.0.1", 50000)) as c:
         yield c

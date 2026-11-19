@@ -9,6 +9,8 @@ ISOLATION_CASES. test_every_route_with_an_id_is_covered fails when a new one is 
 (tasks and documents in later stages).
 """
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -77,9 +79,11 @@ def alices_data(api, two_users, db_session) -> dict[str, str]:
     )
     db_session.add(card)
     db_session.commit()
-    document_id = client.post(
+    upload = client.post(
         "/api/documents", files={"file": ("Alice's notes.md", b"# Thermodynamics", "text/markdown")}
-    ).json()["id"]
+    )
+    # SMA-47: the upload streams one JSON event per line; the last one holds the document.
+    document_id = json.loads(upload.text.splitlines()[-1])["document"]["id"]
     return {
         "conversation": conversation_id,
         "message": reply["message_id"],

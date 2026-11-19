@@ -11,7 +11,7 @@
   document failed. Anything else is a bug in our code: it is raised, not hidden.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
@@ -39,6 +39,16 @@ def embed_document(
     provider: EmbeddingProvider,
     on_progress: Progress | None = None,
 ) -> None:
+    """All batches, calling on_progress after each one (the retry route, tests)."""
+    for progress in embed_steps(db, document, provider):
+        if on_progress:
+            on_progress(progress)
+
+
+def embed_steps(
+    db: Session, document: Document, provider: EmbeddingProvider
+) -> Generator[tuple[int, int], None, None]:
+    """Yields (chunks done, chunks in total) after each batch (SMA-47: live progress)."""
     _clear_vectors_from_other_models(db, document, provider)
     todo = list(
         db.scalars(
@@ -66,8 +76,7 @@ def embed_document(
             chunk.embedding_version = provider.version
         db.commit()  # keep this batch, whatever happens to the next one
         done += len(batch)
-        if on_progress:
-            on_progress((done, total))
+        yield (done, total)
 
 
 def _clear_vectors_from_other_models(db: Session, document: Document, provider) -> None:
