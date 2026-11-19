@@ -12,7 +12,7 @@ from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]  # app -> backend
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0"
 
 
 class Settings(BaseSettings):

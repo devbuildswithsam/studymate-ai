@@ -824,3 +824,56 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-52 — Release v1.0: README, tag
+**Date:** 20 Nov 2026
+
+**What I did**
+- Rewrote the README for someone who has never seen the project: what it does, an architecture diagram (Mermaid, drawn by GitHub), setup in four steps, "if something goes wrong", free-tier notes and the evaluation results. The long API reference moved to `docs/reference.md`.
+- Tested the README like code: a fresh clone from GitHub into an empty folder, following its commands exactly, with no API keys. Setup, migrations, the local user, `npm install`, 655 tests, both servers and the `/api` proxy all worked.
+- That test caught the app still calling itself version 0.1.0: now 1.0.0 (API and frontend).
+- Moved the demo video and screenshots to SMA-55 (due 27 Nov) and tagged `v1.0`.
+
+**What I learned**
+- **Docs are for a stranger:** write the README for the first ten minutes of a new person (what is it, how do I run it, what if it breaks); detail goes in a reference file.
+- **Test the docs, don't trust them:** "it works on my machine" hides missing steps; a fresh clone in an empty folder is the honest check.
+- **A diagram in code** (Mermaid) lives in the repo, shows in GitHub, and changes in a normal diff.
+- **Scope can move:** the video doesn't block the release; a ticket with a date keeps it from being forgotten.
+- **A tag marks a release:** `v1.0` points at one exact commit that anyone can check out later.
+
+**What confused me**
+- …
+
+---
+
+## v1.0 retrospective (Stages 0–4)
+**Date:** 20 Nov 2026
+
+**What we built:** a local, single-user AI study assistant: chat with two free models and automatic fallback, saved chats and notes, a Tasks board, the app's own MCP server and an agent loop that creates tasks with confirmation cards and Undo, document upload with real progress, cited answers grounded in my PDFs, summaries, and an evaluation harness. About 40 tickets, 80 commits, 8 ADRs, 655 backend tests, all without a real AI call in the test suite.
+
+**What went well**
+- **Test-first from SMA-23 on**, plus mutation checks: bugs showed up in tests, not in the browser.
+- **One ticket at a time** with a Done-when: always clear when something was finished.
+- **Security as rules in code, not in prompts:** `user_id` only from the server, scope before search, write policy and red-team tests.
+- **ADRs** recorded why (Groq as default, the embedding model, staying on SQLite), so decisions didn't get argued twice.
+- **Measuring instead of guessing:** the eval showed GPT-OSS fails safely ("not found", never invented) and that retrieval is the weak spot.
+
+**What was hard**
+- **Free tiers:** Gemini timeouts, 503s and 429s forced the switch to Groq and made the Gemini eval mostly failures.
+- **Real models behave differently from fakes:** Gemini's missing index 0, GPT-OSS citing with 【1】. One live check with public text before handover caught both.
+- **Windows tooling:** CRLF line endings, shell escaping, pre-commit skipping new files, stray background servers.
+
+**What I'd do differently**
+- Run a tiny live check of each provider at the start of every AI ticket, not only at the end.
+- Write the README section as part of each ticket (it mostly was), so the release only needed a tidy-up.
+- Write the eval cases earlier (Stage 4 start), so every RAG change could be measured as it landed.
+
+**Carry into v1.1**
+- Follow-ups from the eval: better retrieval for the 3 missed cases, cited pages in the CSV, a total time limit per AI call.
+- SMA-55: demo video and screenshots.
+- Before any public deploy: auth (Stage 5), and replacing `AUTH_MODE=local`.
+
+**What confused me**
+- …
