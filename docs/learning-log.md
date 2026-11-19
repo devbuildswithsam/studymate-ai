@@ -780,3 +780,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-50 — Document summary and key points
+**Date:** 19 Nov 2026
+
+**What I did**
+- Every uploaded document now gets a summary and key points, written by the AI at the end of ingestion and saved on the document.
+- Built the document page: Summary / Key points tabs, Short or Detailed style, Regenerate, and "Chat with this document". Checked it in the browser, including revisits that show the saved summary instantly.
+
+**What I learned**
+- **Structured output:** asking the model for JSON ({summary, key_points}) gives data the app can store and show in tabs, not just prose.
+- **Validate AI output before saving it:** prose instead of JSON, an empty summary or a missing list is an error, never half a summary in the database.
+- **Caching:** an AI call is slow and costs quota, so do it once and store the result; viewing reads the database. A test counts the AI calls to prove it.
+- **Long documents don't fit in one prompt:** evenly spaced excerpts (start, middle, end) are a cheap first approach; the trade-off is noted and will be measured in SMA-51.
+- **A failure in an extra step shouldn't break the main one:** if the summary fails, the document is still ready and searchable.
+- **Test safety grows with features:** uploads now call the chat AI too, so every test gets a fake chat AI by default, like the fake embedder.
+- **Error messages depend on context:** the general "AI is busy" text was wrong for "the AI sent an unexpected answer", so this page shows the backend's own message.
+
+**What confused me**
+- …
