@@ -22,7 +22,13 @@ build with me one ticket at a time, and explain everything you do.
   trusted user context, chat agent loop (max 5 tool calls, "Used tool" lines), write-action
   policy (read / create / change: confirmation cards, Undo, red-team tests). Groq is the
   default chat model (ADR-0007).
-- Next: **Stage 4 (documents, RAG, evaluation), starting with SMA-44**.
+- Stage 4 is complete and **v1.0 is released** (tag `v1.0`): document upload with progress,
+  extraction/chunking, Gemini embeddings (ADR-0008), user-scoped retrieval, study chat with
+  checked citations and "not found", summaries, evaluation harness (`backend/evals/`, first
+  results 19 Nov 2026), README for a fresh clone + `docs/reference.md`.
+- Next: **Stage 5 (v1.1), tickets SMA-56..69, starting with SMA-56** (auth decision, ADR-0009).
+  Open side tasks: SMA-55 (demo video + screenshots, due 27 Nov 2026); eval follow-ups listed in
+  `backend/evals/results/2026-11-19-notes.md`.
 - Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
   v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
 
