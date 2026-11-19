@@ -1,0 +1,31 @@
+case_id,kind,document,question,answerable,answer,found,facts_found,facts_total,correct,hit_at_5,reciprocal_rank,citations,citations_correct,invented_citations,tool_called,tool_arguments,latency_ms,retrieval_ms,tokens_in,tokens_out,fallback_used,error
+fr-01,document,french_revolution.pdf,When did the Storming of the Bastille take place?,True,,False,0,2,False,True,1.0,0,0,0,,,2618,1062,0,0,False,unavailable
+fr-02,document,french_revolution.pdf,"What oath did the Third Estate take when they found their meeting place closed, and what did they promise?",True,,False,0,2,False,True,1.0,0,0,0,,,61351,674,0,0,False,timeout
+fr-03,document,french_revolution.pdf,"When was the Declaration of the Rights of Man and of the Citizen published, and who was the most prominent member of the subcommittee that drafted it?",True,,False,0,2,False,True,1.0,0,0,0,,,12960,737,0,0,False,unavailable
+fr-04,document,french_revolution.pdf,Where was Louis XVI recognised and arrested when the royal family tried to escape from Paris in June 1791?,True,,False,0,1,False,True,1.0,0,0,0,,,61362,674,0,0,False,timeout
+fr-05,document,french_revolution.pdf,Which three men formed the Consulate after the coup of 18 Brumaire?,True,,False,0,3,False,True,1.0,0,0,0,,,5881337,974,0,0,False,unavailable
+fr-06,document,french_revolution.pdf,"Under the Directory, how many men sat in the Council of Ancients, and who held executive power?",True,,False,0,2,False,True,1.0,0,0,0,,,61540,942,0,0,False,timeout
+fr-07,document,french_revolution.pdf,How large was the French army by May 1794?,True,,False,0,2,False,True,1.0,0,0,0,,,5311,904,0,0,False,unavailable
+fr-08,document,french_revolution.pdf,How much did the population of France grow between 1715 and 1789?,True,,False,0,2,False,False,0.0,0,0,0,,,61656,961,0,0,False,timeout
+fr-09,document,french_revolution.pdf,"When was Robespierre executed, and which close ally was executed with him?",True,,False,0,2,False,True,0.3333333333333333,0,0,0,,,2309,983,0,0,False,unavailable
+fr-10,document,french_revolution.pdf,"What did the Phrygian cap, or Liberty cap, symbolise during the Revolution?",True,"The Liberty cap (also known as the Phrygian cap) reflected Roman republicanism and liberty, referencing the Roman ritual of manumission where a freed slave received the cap as a symbol of their newfound liberty [2].",True,2,2,True,True,1.0,1,1,0,,,48728,1063,4342,45,False,
+fr-11,document,french_revolution.pdf,What was the name of Napoleon's horse?,False,,False,0,0,False,,,0,0,0,,,61544,622,0,0,False,timeout
+fr-12,document,french_revolution.pdf,Who won the 1998 FIFA World Cup?,False,,False,0,0,False,,,0,0,0,,,61473,658,0,0,False,timeout
+th-01,document,thermodynamics.pdf,"Who is called the father of thermodynamics, and what book did he publish in 1824?",True,,False,0,2,False,True,0.3333333333333333,0,0,0,,,61987,988,0,0,False,timeout
+th-02,document,thermodynamics.pdf,What does the zeroth law of thermodynamics state?,True,,False,0,2,False,True,0.3333333333333333,0,0,0,,,61383,740,0,0,False,timeout
+th-03,document,thermodynamics.pdf,Why was the zeroth law given that name instead of being numbered after the others?,True,,False,0,2,False,False,0.0,0,0,0,,,2639,703,0,0,False,unavailable
+th-04,document,thermodynamics.pdf,"Who built the first engine based on Papin's designs, and in which year?",True,,False,0,2,False,True,1.0,0,0,0,,,61895,733,0,0,False,timeout
+th-05,document,thermodynamics.pdf,"According to the third law of thermodynamics, what happens to the entropy of a system as its temperature approaches absolute zero?",True,,False,0,2,False,True,1.0,0,0,0,,,2056,623,0,0,False,unavailable
+th-06,document,thermodynamics.pdf,"Who first formulated a concise definition of thermodynamics, and in which year?",True,Scots-Irish physicist Lord Kelvin was the first to formulate a concise definition of thermodynamics in 1854 [1].,True,2,2,True,True,1.0,1,1,0,,,56074,965,3276,26,False,
+th-07,document,thermodynamics.pdf,What is the average surface temperature on Mars?,False,,False,0,0,False,,,0,0,0,,,61768,634,0,0,False,timeout
+ph-01,document,photosynthesis.pdf,Why do most plants look green?,True,,False,0,2,False,False,0.0,0,0,0,,,61696,1042,0,0,False,timeout
+ph-02,document,photosynthesis.pdf,"Who discovered photosynthesis, and in which year?",True,,False,0,2,False,True,1.0,0,0,0,,,61633,977,0,0,False,timeout
+ph-03,document,photosynthesis.pdf,What did Jean Senebier demonstrate in 1796?,True,,False,0,2,False,True,0.5,0,0,0,,,63365,710,0,0,False,error
+ph-04,document,photosynthesis.pdf,What is the average rate of energy captured by photosynthesis worldwide?,True,,False,0,2,False,True,0.3333333333333333,0,0,0,,,1910,1045,0,0,False,error
+ph-05,document,photosynthesis.pdf,Why do plants close their stomata in hot and dry conditions?,True,,False,0,1,False,True,0.5,0,0,0,,,1249,672,0,0,False,error
+ph-06,document,photosynthesis.pdf,How old are the fossils thought to be of filamentous photosynthetic organisms?,True,,False,0,1,False,False,0.0,0,0,0,,,1647,1077,0,0,False,error
+ph-07,document,photosynthesis.pdf,How fast can bamboo grow in a single day?,False,,False,0,0,False,,,0,0,0,,,1818,941,0,0,False,error
+ph-08,document,photosynthesis.pdf,How many moons does Jupiter have?,False,,False,0,0,False,,,0,0,0,,,2158,1314,0,0,False,error
+tool-01,tool,,Add a task to revise chapter 3 of my physics notes by Friday,True,,False,0,0,False,,,0,0,0,,,36,0,0,0,False,error
+tool-02,tool,,Show me my pending tasks,True,,False,0,0,False,,,0,0,0,,,7,0,0,0,False,error
+tool-03,tool,,Save a note titled Carnot cycle that says it is the most efficient heat engine cycle,True,,False,0,0,False,,,0,0,0,,,19,0,0,0,False,error

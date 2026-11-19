@@ -290,6 +290,18 @@ commit did **not** happen: run `git add` and commit again.
 Commit messages follow conventional commits with the Jira key, e.g.
 `feat(SMA-22): validated model registry, fallback manager and models endpoint`.
 
+## Evaluation (SMA-51)
+
+How well does it answer questions about documents? `backend/evals/` holds 30 test cases on
+three frozen Wikipedia PDFs and a runner that scores answers, citations, retrieval (hit
+rate@5, MRR), refusals, latency, tokens, failures and tool calls, deterministically. It
+calls real APIs (public text only), so you run it by hand; results are committed in
+`backend/evals/results/`. See [backend/evals/README.md](backend/evals/README.md).
+
+```bat
+python -m evals.run --provider groq --model openai/gpt-oss-120b --pause 30
+```
+
 ## Dev scripts
 From `backend\` with the venv active. These **do** call the real APIs (they need keys):
 

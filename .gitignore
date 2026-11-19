@@ -31,3 +31,6 @@ Thumbs.db
 
 # Deployment
 .vercel/
+
+# Evaluation cache: the ingested eval documents (SMA-51), rebuilt by evals.run
+backend/evals/.cache/
