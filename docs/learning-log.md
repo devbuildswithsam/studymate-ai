@@ -678,3 +678,23 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-45 — Text extraction, cleaning and chunking (with unit tests)
+**Date:** 19 Nov 2026
+
+**What I did**
+- Built the three text steps of ingestion: get the text out of a PDF / TXT / MD (rejecting scanned PDFs), clean it, and cut it into ~800-token chunks with 15% overlap, each knowing its page.
+- Wrote tests that build real PDFs in code (including image-only pages), so no binary files are in the repo.
+
+**What I learned**
+- **A PDF has no paragraphs:** it stores positioned lines. pypdf's default extraction dropped the gaps between paragraphs; its layout mode keeps them as blank lines, at the cost of extra spaces that cleaning removes.
+- **A scanned PDF has no text at all**, only pictures. Without OCR, the honest answer is a clear "No text found" message.
+- **Cleaning is heuristics:** join "thermo-" + "dynamics", drop lines repeated at the top/bottom of most pages, drop bare page numbers. Every rule has edge cases (a page that starts "Exercise 1", "Exercise 2"... would be dropped too).
+- **Chunk size and overlap are a trade-off:** big chunks hold whole ideas, small ones match precisely; overlap keeps ideas that sit on a boundary whole in one chunk.
+- **Tokens can be estimated** (characters ÷ 3.75): every provider counts them a bit differently anyway.
+- **Probe a library before designing around it**, and **check a test fails for the right reason**: two "bugs" were my own test inputs (texts shorter than the 20-letter minimum).
+
+**What confused me**
+- …
