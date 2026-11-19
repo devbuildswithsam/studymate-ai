@@ -740,3 +740,23 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-48 — Retrieval (NumPy cosine, user- and document-scoped) + search_documents MCP tool
+**Date:** 19 Nov 2026
+
+**What I did**
+- Built document search: the question becomes a vector, NumPy compares it with every chunk at once, and the top 5 come back with document name and page.
+- Added `search_documents` to the MCP server, so the chat's AI (and MCP clients) can look things up in my documents.
+
+**What I learned**
+- **Cosine similarity** measures how closely two vectors point the same way (-1 to 1). It ignores size, so a long chunk doesn't win just by having bigger numbers. With normalised vectors it is simply the dot product.
+- **NumPy does it in one step:** stack all chunk vectors into a matrix, multiply by the question vector, sort the scores. `argsort` with `kind="stable"` keeps ties in reading order.
+- **Scope before ranking:** filter to MY ready, selected documents in SQL first, THEN rank. Ranking everyone's chunks and filtering afterwards could leak another user's text into the top 5.
+- **Semantic search finds meaning, not words:** "Why did people storm a prison in Paris?" found my French Revolution notes, which only say "the Bastille".
+- **Test data has to separate the right answer from the wrong one:** my first cosine test was a tie under the dot product, so it couldn't tell them apart; mutation testing showed it.
+- **A special case can be redundant:** SQL's `IN ()` already returns nothing, so my "empty selection" early return was removed.
+
+**What confused me**
+- …
