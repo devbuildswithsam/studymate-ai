@@ -13,6 +13,7 @@ transaction: the repositories never commit, these routes commit once at the end.
 
 import functools
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
@@ -32,6 +33,7 @@ from app.repositories import conversations as repo
 from app.services.actions import record_actions
 from app.services.agent import ToolStep, run_agent_for_user
 from app.services.llm.base import ChatOptions, ChatResponse, Message
+from app.services.llm.embeddings import EmbeddingProvider, get_embedder
 from app.services.llm.exceptions import AllModelsFailedError, LLMConfigError
 from app.services.llm.fallback import Attempt, FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
@@ -208,6 +210,7 @@ def send_message(
     registry: Registry,
     manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
     settings: Annotated[Settings, Depends(get_settings)],
+    embedder: Annotated[Callable[[], EmbeddingProvider], Depends(get_embedder)],
 ) -> ChatReply:
     conversation = my_conversation(db, user_id, conversation_id)
     model_id = choose_model(request, conversation, registry)
@@ -226,7 +229,11 @@ def send_message(
     try:
         if uses_tools:
             # The tools act for THIS request's user, set by us, never chosen by the AI.
-            context = ToolContext(user_id, _session_factory(settings.database_url))
+            context = ToolContext(
+                user_id,
+                _session_factory(settings.database_url),
+                make_embedder=embedder,  # SMA-48: search_documents embeds the question
+            )
             outcome = ask_with_tools(context, manager, messages, model_id, request, options)
         else:
             outcome = ask(manager, messages, model_id, request, options)

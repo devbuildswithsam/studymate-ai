@@ -15,6 +15,7 @@ HEADERS = {
     "MCP-Protocol-Version": "2025-11-25",
 }
 LOCAL = ("127.0.0.1", 50000)
+NOTES = b"Entropy always increases in an isolated system, so heat flows from hot to cold."
 BASE_URL = "http://127.0.0.1:8000"  # the Host header DNS-rebinding protection accepts
 
 
@@ -47,6 +48,7 @@ def test_the_apps_tools_are_listed_at_mcp(client):
         "complete_task",
         "save_note",
         "search_notes",
+        "search_documents",  # SMA-48
     }
 
 
@@ -107,3 +109,17 @@ def test_the_app_can_start_and_stop_many_times(client):
     for _ in range(3):
         with TestClient(app, client=LOCAL, base_url=BASE_URL) as http:
             assert initialize(http).status_code == 200
+
+
+def test_search_documents_over_mcp_uses_the_apps_embedding_settings(client):
+    # The tests have no Gemini key: a correctly wired embedder can't reach the real API and
+    # says so. ("isn't available" would mean no embedder was given to the tools at all.)
+    client.post("/api/documents", files={"file": ("notes.md", NOTES, "text/markdown")})
+
+    with TestClient(app, client=LOCAL, base_url=BASE_URL) as http:
+        reply = rpc(
+            http, "tools/call", {"name": "search_documents", "arguments": {"query": "entropy"}}
+        ).json()["result"]
+
+    assert reply["isError"] is True
+    assert "GEMINI_API_KEY is not set" in reply["content"][0]["text"]

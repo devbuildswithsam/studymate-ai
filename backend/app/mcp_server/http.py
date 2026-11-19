@@ -19,6 +19,8 @@ from app.db.session import _session_factory
 from app.errors import error_response
 from app.mcp_server.context import ToolContext, acting_as
 from app.mcp_server.server import mcp_server
+from app.services.llm.embeddings import build_embedding_provider
+from app.services.llm.registry import get_registry
 
 
 def app_settings(scope: Scope) -> Settings:
@@ -58,7 +60,13 @@ class McpEndpoint:
             await error_response(503, "The MCP server is not running.")(scope, receive, send)
             return
         # Every tool called during this request acts for this user, and only this user.
-        with acting_as(ToolContext(user_id=user.id, session_factory=session_factory)):
+        context = ToolContext(
+            user_id=user.id,
+            session_factory=session_factory,
+            # SMA-48: search_documents embeds the question with the app's embedding model.
+            make_embedder=lambda: build_embedding_provider(get_registry(), settings),
+        )
+        with acting_as(context):
             await self.handler(scope, receive, send)
 
 

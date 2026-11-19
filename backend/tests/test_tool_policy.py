@@ -26,6 +26,7 @@ def test_the_tags():
     assert TOOL_KINDS == {
         "list_tasks": "read",
         "search_notes": "read",
+        "search_documents": "read",  # SMA-48
         "create_task": "create",
         "save_note": "create",
         "update_task": "change",

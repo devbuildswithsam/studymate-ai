@@ -10,15 +10,22 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:  # for type hints only: avoids importing the LLM code here
+    from app.services.llm.embeddings import EmbeddingProvider
 
 
 @dataclass(frozen=True)
 class ToolContext:
     user_id: str
     session_factory: Callable[[], Session]  # opens a session on the app's database
+    # SMA-48: builds the embedding provider for search_documents (the question must be
+    # embedded with the same model as the chunks). None = search isn't available here.
+    make_embedder: "Callable[[], EmbeddingProvider] | None" = None
 
 
 _current: ContextVar[ToolContext | None] = ContextVar("mcp_tool_context", default=None)

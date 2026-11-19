@@ -43,8 +43,13 @@ def as_user(db_url):
     """as_user(user): run tools as that user, the way the backend will set it."""
 
     @contextmanager
-    def run_as(user: User):
-        with acting_as(ToolContext(user_id=user.id, session_factory=_session_factory(db_url))):
+    def run_as(user: User, embedder=None):  # embedder: for search_documents (SMA-48)
+        context = ToolContext(
+            user_id=user.id,
+            session_factory=_session_factory(db_url),
+            make_embedder=(lambda: embedder) if embedder else None,
+        )
+        with acting_as(context):
             yield
 
     return run_as
@@ -60,11 +65,11 @@ async def call(client, tool: str, **arguments):
 
 
 @pytest.mark.anyio
-async def test_the_stage_3_tools_and_nothing_that_deletes():
+async def test_the_tools_and_nothing_that_deletes():
     async with Client(mcp_server) as client:
         tools = (await client.list_tools()).tools
 
-    assert {t.name for t in tools} == STAGE_3_TOOLS
+    assert {t.name for t in tools} == STAGE_3_TOOLS | {"search_documents"}  # + SMA-48
     assert not any("delete" in t.name or "remove" in t.name for t in tools)
 
 
@@ -82,7 +87,7 @@ async def test_read_only_tools_are_marked_as_such():
     async with Client(mcp_server) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}
 
-    for name in ("list_tasks", "search_notes"):
+    for name in ("list_tasks", "search_notes", "search_documents"):
         assert tools[name].annotations.read_only_hint is True, name
     for name in ("create_task", "update_task", "complete_task", "save_note"):
         assert tools[name].annotations.read_only_hint is False, name
@@ -274,3 +279,108 @@ async def test_without_a_signed_in_user_the_tools_refuse(db_session):
     assert result.is_error
     assert "No signed-in user" in result.content[0].text
     assert db_session.query(Task).count() == 0
+
+
+# --- search_documents (SMA-48) ------------------------------------------------------------------
+
+
+@pytest.fixture
+def documents(users, db_session):
+    """Alice's physics notes and Bob's (better matching) secret, both embedded and ready."""
+    from tests.test_rag_retrieve import PHYSICS, KeywordEmbedder, add_document
+
+    alice, bob = users
+    embedder = KeywordEmbedder()
+    add_document(db_session, bob, "Bob's secrets.pdf", [(1, "entropy entropy entropy")], embedder)
+    physics = add_document(db_session, alice, "Physics.pdf", PHYSICS, embedder)
+    return embedder, physics
+
+
+@pytest.mark.anyio
+async def test_search_documents_finds_my_best_passages_with_name_and_page(
+    users, as_user, documents
+):
+    alice, _ = users
+    embedder, physics = documents
+
+    with as_user(alice, embedder):
+        async with Client(mcp_server) as client:
+            hits = (await call(client, "search_documents", query="What is entropy?"))["result"]
+
+    assert (hits[0]["filename"], hits[0]["page"], hits[0]["document_id"]) == (
+        "Physics.pdf",
+        2,
+        physics.id,
+    )
+    assert hits[0]["text"].startswith("Entropy always increases")
+    assert len(hits) == 5
+    assert all(h["filename"] != "Bob's secrets.pdf" for h in hits)  # never another user's
+
+
+@pytest.mark.anyio
+async def test_search_documents_can_be_limited_to_some_documents_and_fewer_results(
+    users, as_user, documents
+):
+    alice, _ = users
+    embedder, physics = documents
+
+    with as_user(alice, embedder):
+        async with Client(mcp_server) as client:
+            hits = (
+                await call(
+                    client, "search_documents", query="heat", document_ids=[physics.id], top_k=2
+                )
+            )["result"]
+
+    assert len(hits) == 2
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"query": "heat", "top_k": 9},
+        {"query": "heat", "top_k": 0},
+        {"query": ""},
+        {"query": "x" * 501},
+    ],
+    ids=["top_k over 8", "top_k 0", "empty query", "query too long"],
+)
+async def test_search_documents_arguments_are_capped(users, as_user, documents, arguments):
+    alice, _ = users
+    embedder, _ = documents
+
+    with as_user(alice, embedder):
+        async with Client(mcp_server) as client:
+            result = await client.call_tool("search_documents", arguments)
+
+    assert result.is_error
+
+
+@pytest.mark.anyio
+async def test_a_busy_embedding_service_is_a_clear_tool_error(users, as_user, documents):
+    from app.services.llm.exceptions import RateLimitedError
+    from app.services.llm.fake import FakeEmbeddingProvider
+
+    alice, _ = users
+    busy = FakeEmbeddingProvider(fail_on_call=1, error=RateLimitedError("quota", "fake"))
+    busy.model, busy.dimensions = "keyword-model", 6  # same vectors as the stored chunks
+
+    with as_user(alice, busy):
+        async with Client(mcp_server) as client:
+            result = await client.call_tool("search_documents", {"query": "entropy"})
+
+    assert result.is_error
+    assert "busy" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_without_an_embedder_search_is_unavailable_not_a_crash(users, as_user, documents):
+    alice, _ = users
+
+    with as_user(alice):  # e.g. a context that only runs write tools
+        async with Client(mcp_server) as client:
+            result = await client.call_tool("search_documents", {"query": "entropy"})
+
+    assert result.is_error
+    assert "search isn't available" in result.content[0].text

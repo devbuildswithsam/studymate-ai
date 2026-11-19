@@ -141,7 +141,8 @@ same as one that doesn't exist.
 
 ### MCP server (`/mcp`)
 StudyMate's tools for AI clients (guide 7.2), over Streamable HTTP (stateless, plain JSON):
-`create_task`, `list_tasks`, `update_task`, `complete_task`, `save_note`, `search_notes`.
+`create_task`, `list_tasks`, `update_task`, `complete_task`, `save_note`, `search_notes`, and
+`search_documents` (SMA-48: `query`, optional `document_ids`, `top_k` up to 8; read-only).
 There are **no delete tools**: deleting happens only through the app's buttons.
 
 - **Who the tools act for** comes only from the server: `/mcp` resolves the user (local mode:
@@ -311,7 +312,9 @@ backend/
     services/rag/      documents (SMA-45): extract.py (pypdf, page by page; scans rejected),
                        clean.py (hyphens, padding, headers/footers), chunk.py (~800
                        tokens, 15% overlap, paragraph boundaries, page numbers), embed.py
-                       (vectors in batches, resumable, one model per document; SMA-46)
+                       (vectors in batches, resumable, one model per document; SMA-46),
+                       ingest.py (the pipeline with progress; SMA-47), retrieve.py (top-k
+                       by NumPy cosine similarity, scoped to the user BEFORE ranking; SMA-48)
     services/titles.py chat titles: a short AI title, or the first words of the message
   alembic/             database migrations (env.py wired to the app's settings and models)
   scripts/             seed.py (local user) and dev scripts that call real APIs

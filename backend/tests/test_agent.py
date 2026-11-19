@@ -134,6 +134,7 @@ async def test_the_model_gets_the_tools_and_each_result_with_its_call_id(tools_s
         "complete_task",
         "save_note",
         "search_notes",
+        "search_documents",  # SMA-48
     }
     second_turn = main.calls[1]
     assert second_turn[-2]["role"] == "assistant"

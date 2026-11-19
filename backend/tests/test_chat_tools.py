@@ -145,3 +145,21 @@ def test_the_tool_call_limit_ends_with_a_clear_message(tool_chat, tool_fakes):
     reply = response.json()
     assert len(reply["tool_calls"]) == 5
     assert "5 tool calls" in reply["reply"]
+
+
+# --- Searching documents from the chat (SMA-48) -------------------------------------------------
+
+
+def test_the_ai_can_search_my_documents_from_the_chat(tool_chat, tool_fakes, client):
+    notes = b"Entropy always increases in an isolated system, so heat flows from hot to cold."
+    client.post("/api/documents", files={"file": ("Physics.md", notes, "text/markdown")})
+    tool_fakes["tools-model"].replies = [
+        [call("search_documents", {"query": "entropy"})],
+        "Entropy always increases (Physics.md).",
+    ]
+
+    _, response = tool_chat("What do my notes say about entropy?")
+
+    step = response.json()["tool_calls"][0]
+    assert (step["name"], step["is_error"]) == ("search_documents", False)
+    assert "Physics.md" in step["result"]  # the document was found, for this user
