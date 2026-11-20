@@ -877,3 +877,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-56 — Auth decision: self-built (ADR-0009)
+**Date:** 20 Nov 2026
+
+**What I did**
+- Compared building login ourselves with a hosted provider (Clerk) on learning value, effort, cost, security and fit with our code, and chose **self-built**.
+- Ran a small spike (`experiments/auth_spike/`): Argon2 hashing with pwdlib (86 ms per hash) and JWTs with PyJWT; expired, tampered, wrongly signed and `alg: none` tokens are all rejected.
+- Wrote ADR-0009 and updated the auth tickets SMA-57 to SMA-61 with the exact choices.
+
+**What I learned**
+- **Hashing, not encrypting:** a password is never stored; Argon2 turns it into a slow, salted hash. Slow is the point: 86 ms is nothing at login but very expensive for someone guessing millions of passwords.
+- **The salt and settings live inside the hash string** (`$argon2id$v=19$m=65536,t=3,p=4$...`), so settings can be raised later.
+- **A JWT is signed, not secret:** anyone can read what's inside; the signature only proves we made it and nobody changed it. That's why it holds just the user id and an expiry.
+- **Always name the algorithm when decoding** (`algorithms=["HS256"]`), or a token claiming `alg: none` could skip the signature check.
+- **HttpOnly cookies** can't be read by JavaScript, which protects the session from injected scripts; CSRF protection (SMA-58) covers the other direction.
+- **Same answer, same timing** for "no such email" and "wrong password", so login doesn't reveal who has an account.
+- **Hosted auth trades learning and control for features** (password reset, social login, 2FA); a good choice for many products, not for this one's goals.
+- **Random tokens vs passwords:** a 32-byte random token can't be guessed, so a fast SHA-256 hash is enough; human passwords need a slow hash.
+
+**What confused me**
+- …
