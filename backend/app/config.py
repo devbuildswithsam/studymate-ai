@@ -67,3 +67,10 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Read the settings once and reuse them (also used as a FastAPI dependency)."""
     return Settings()
+
+
+def app_settings(scope: dict) -> Settings:
+    """The settings for code that runs outside a route (/mcp, middleware), honouring the
+    same override tests use for every route. `scope` is the ASGI request scope."""
+    fastapi_app = scope["app"]
+    return fastapi_app.dependency_overrides.get(get_settings, get_settings)()

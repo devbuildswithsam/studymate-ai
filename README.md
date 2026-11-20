@@ -160,6 +160,7 @@ with **Ctrl+C**.
 | A document is **Failed** at embedding | Usually a rate limit: click **Retry**; it continues where it stopped |
 | The API won't start and names a field in `models.yaml` | The model registry has a mistake ([ADR-0001](docs/adr/0001-model-ids-only-in-models-yaml.md)) |
 | 403 from another device | Expected: local mode only accepts requests from this computer |
+| 403 "didn't come from the StudyMate app" | Open the app at exactly `FRONTEND_ORIGIN` (default <http://localhost:5173>, not `127.0.0.1:5173`): other addresses are blocked as a safety check (SMA-58) |
 
 ## Free-tier notes
 

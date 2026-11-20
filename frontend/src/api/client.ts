@@ -14,6 +14,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The CSRF token (SMA-58): the backend puts it in a cookie JavaScript may read, and every
+ * write sends it back in the X-CSRF-Token header. Other websites can't read our cookies,
+ * so they can't send a matching header. Undefined in local mode (no login, no cookie).
+ */
+export function csrfToken(): string | undefined {
+  const prefix = 'studymate_csrf='
+  const cookie = document.cookie.split('; ').find((c) => c.startsWith(prefix))
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : undefined
+}
+
+/** The header to add to a write, or nothing. Exported for the XHR upload too. */
+export function csrfHeader(): Record<string, string> {
+  const token = csrfToken()
+  return token ? { 'X-CSRF-Token': token } : {}
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: 'application/json' } })
   if (!response.ok) {
@@ -32,7 +49,10 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
 
 /** DELETE: the backend answers 204 No Content, so there is no body to read. SMA-31. */
 export async function apiDelete(path: string): Promise<void> {
-  const response = await fetch(path, { method: 'DELETE', headers: { Accept: 'application/json' } })
+  const response = await fetch(path, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', ...csrfHeader() },
+  })
   if (!response.ok) {
     throw await toApiError(response)
   }
@@ -50,7 +70,7 @@ async function sendJson<T>(
 ): Promise<T> {
   const response = await fetch(path, {
     method,
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...csrfHeader() },
     body: JSON.stringify(body),
   })
   if (!response.ok) {

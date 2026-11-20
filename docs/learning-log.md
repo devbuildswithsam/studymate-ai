@@ -922,3 +922,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-58 — CSRF protection: Origin check and double-submit token
+**Date:** 20 Nov 2026
+
+**What I did**
+- Added a CSRF middleware (`app/csrf.py`) in front of every route. For POST, PUT, PATCH and DELETE: an **Origin check** in both auth modes (anything but our frontend gets 403), and in `jwt` mode a **double-submit token** (the `studymate_csrf` cookie must match the `X-CSRF-Token` header).
+- Login and register hand out a fresh token, `/me` restores a missing one, logout deletes it.
+- The frontend's API client and the XHR upload send the header automatically.
+- Tests first: 27 backend and 9 frontend tests; 15 mutants all caught; a live run through the Vite proxy.
+
+**What I learned**
+- **CSRF in one sentence:** another website makes MY browser send a request to StudyMate, and the browser attaches my cookies, so it looks like me.
+- **CORS is not CSRF protection:** CORS stops other sites *reading* our answers, not *sending* requests.
+- **Double-submit works because other sites can send our cookies but can't read them,** so they can't copy the token into a header. That's why this cookie is readable by JavaScript and the session cookie isn't.
+- **Local mode needed it too:** it trusts everything from this computer, and my browser is on this computer, so any website could have written to my local StudyMate.
+- **Middleware protects routes that don't exist yet;** a check in each route depends on someone remembering it.
+- **GET must never change anything,** which is what lets it skip the check.
+- **Same origin means exactly the same address:** `127.0.0.1:5173` is a different origin from `localhost:5173`.
+
+**What confused me**
+- …

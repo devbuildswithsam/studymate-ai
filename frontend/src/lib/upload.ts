@@ -5,7 +5,7 @@
 //   xhr.upload.onprogress -> bytes sent        ("Uploading 45%")
 //   xhr.onprogress        -> the answer so far: one JSON event per line (NDJSON),
 //                            streamed by the backend while it works ("Embedding 18/30")
-import { ApiError } from '@/api/client'
+import { ApiError, csrfHeader } from '@/api/client'
 import type { DocumentInfo } from '@/api/documents'
 
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 // same limit as the backend (4 MB)
@@ -119,6 +119,9 @@ export function uploadDocument(
     form.append('file', file)
     xhr.open('POST', '/api/documents')
     xhr.setRequestHeader('Accept', 'application/x-ndjson, application/json')
+    for (const [name, value] of Object.entries(csrfHeader())) {
+      xhr.setRequestHeader(name, value) // SMA-58: uploads are writes too
+    }
     xhr.send(form)
   })
 }

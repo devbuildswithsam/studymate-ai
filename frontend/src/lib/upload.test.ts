@@ -25,7 +25,10 @@ class FakeXhr {
     this.method = method
     this.url = url
   }
-  setRequestHeader() {}
+  headers: Record<string, string> = {}
+  setRequestHeader(name: string, value: string) {
+    this.headers[name] = value
+  }
   send(body: FormData) {
     this.body = body
   }
@@ -62,6 +65,17 @@ describe('uploadDocument', () => {
 
     expect([xhr.method, xhr.url]).toEqual(['POST', '/api/documents'])
     expect((xhr.body?.get('file') as File).name).toBe('Physics.pdf')
+  })
+
+  it('sends the CSRF token like every other write (SMA-58)', () => {
+    document.cookie = 'studymate_csrf=token-123; path=/'
+    try {
+      const { xhr } = start()
+
+      expect(xhr.headers['X-CSRF-Token']).toBe('token-123')
+    } finally {
+      document.cookie = 'studymate_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
+    }
   })
 
   it('reports the upload percentage, then each event as it arrives, then resolves', async () => {

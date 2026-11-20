@@ -10,10 +10,12 @@ from app.config import BACKEND_DIR, Settings, get_settings
 from app.db.seed import ensure_local_user
 from app.db.session import make_engine
 from app.main import app
+from app.services.auth import LoginLimiter, get_login_limiter
 from app.services.llm.embeddings import get_embedder
 from app.services.llm.fake import FakeEmbeddingProvider, FakeProvider
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import get_registry
+from tests.auth_helpers import CSRF_COOKIE, CSRF_HEADER, UNSAFE_METHODS, jwt_settings
 from tests.tool_helpers import REGISTRY as TOOL_REGISTRY
 
 
@@ -67,6 +69,36 @@ def client(db_url, db_session):
     app.dependency_overrides[get_fallback_manager] = lambda: default_ai
     # client=127.0.0.1: requests come from this computer, like the browser via Vite.
     with TestClient(app, client=("127.0.0.1", 50000)) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+# --- Real accounts (SMA-57, SMA-58) ------------------------------------------------
+
+
+@pytest.fixture
+def jwt_api(db_url):
+    """The app in AUTH_MODE=jwt on a temporary database, acting like our frontend:
+
+    - over https, because the session cookie is Secure (browsers make an exception for
+      localhost; the test client doesn't);
+    - on every POST/PUT/PATCH/DELETE it copies the CSRF cookie into the X-CSRF-Token
+      header, as frontend/src/api/client.ts does. Set `.auto_csrf = False` to act like
+      another website, which can't read our cookies.
+    """
+    settings = jwt_settings(db_url)
+    limiter = LoginLimiter()
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_login_limiter] = lambda: limiter
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
+        c.auto_csrf = True
+
+        def add_csrf_header(request):
+            token = c.cookies.get(CSRF_COOKIE)
+            if c.auto_csrf and request.method in UNSAFE_METHODS and token:
+                request.headers.setdefault(CSRF_HEADER, token)
+
+        c.event_hooks["request"].append(add_csrf_header)
         yield c
     app.dependency_overrides.clear()
 

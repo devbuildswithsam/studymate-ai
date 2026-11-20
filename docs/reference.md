@@ -21,6 +21,17 @@ With the API running (see the README):
   route without a valid cookie answers **401**; expired, tampered, wrongly signed and
   `alg: none` tokens are refused. Passwords are stored only as Argon2id hashes (pwdlib).
   `/mcp` answers 401 in `jwt` mode until personal access tokens exist (SMA-61).
+- **CSRF protection (SMA-58, `app/csrf.py`)**, a middleware in front of every route, for
+  POST, PUT, PATCH and DELETE (never GET):
+  - **Origin check, both modes:** a request whose `Origin` (or, without one, `Referer`) is
+    not `FRONTEND_ORIGIN` answers **403**, `null` included. Open the app at exactly that
+    address (default `http://localhost:5173`, not `127.0.0.1:5173`).
+  - **Double-submit token, `jwt` mode:** login and register set a `studymate_csrf` cookie
+    (readable by JavaScript, unlike the session cookie); every write must send the same
+    value in the `X-CSRF-Token` header, or **403**. `frontend/src/api/client.ts` and the
+    upload add it automatically. Login and register need no token (no session yet), only
+    the Origin check. `GET /api/auth/me` restores a missing CSRF cookie; logout deletes it.
+  - `/mcp` is skipped: programs use Bearer tokens there, never cookies (SMA-61).
 - `GET /api/models` — enabled models and their status (`available`, `rate_limited`, `no_key`)
 - `GET /api/conversations` — your conversations, most recent activity first.
   `POST` starts one (optionally `{"model": "..."}`)

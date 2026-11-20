@@ -12,33 +12,24 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from app.config import BACKEND_DIR, Settings, get_settings
+from app.config import BACKEND_DIR, Settings
 from app.db.seed import LOCAL_USER_EMAIL
-from app.main import app
 from app.models import User
 from app.services import auth
 from app.services.auth import (
     SESSION_COOKIE,
     LoginLimiter,
     create_session_token,
-    get_login_limiter,
     hash_password,
     read_session_token,
     verify_password,
 )
+from tests.auth_helpers import SECRET, register, set_cookie_header
 
-SECRET = "test-secret-that-is-long-enough-1234567890"  # 42 characters
 LOGIN_FAILED = "Email or password is incorrect."
-
-
-def jwt_settings(database_url: str = "sqlite://") -> Settings:
-    return Settings(
-        _env_file=None, env="test", auth_mode="jwt", jwt_secret=SECRET, database_url=database_url
-    )
 
 
 # --- Settings and startup checks ------------------------------------------------------------
@@ -191,24 +182,12 @@ def test_a_successful_login_clears_the_failures():
 # --- The API in AUTH_MODE=jwt ------------------------------------------------------------------
 
 
-@pytest.fixture
-def jwt_api(db_url):
-    """The app in jwt mode on a temporary database, over https (the cookie is Secure)."""
-    settings = jwt_settings(db_url)
-    limiter = LoginLimiter()
-    app.dependency_overrides[get_settings] = lambda: settings
-    app.dependency_overrides[get_login_limiter] = lambda: limiter
-    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
-        yield c
-    app.dependency_overrides.clear()
-
-
-def register(api, email="Ada@Example.com", password="correct horse battery", name="Ada"):
-    return api.post("/api/auth/register", json={"email": email, "password": password, "name": name})
+# The jwt_api fixture (conftest.py): the app in jwt mode, over https, acting like our
+# frontend (it sends the CSRF header, SMA-58).
 
 
 def cookie_header(response) -> str:
-    return response.headers["set-cookie"]
+    return set_cookie_header(response, SESSION_COOKIE)
 
 
 def test_register_creates_the_account_and_logs_in(jwt_api, db_session):

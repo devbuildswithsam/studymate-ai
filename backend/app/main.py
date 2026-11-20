@@ -12,6 +12,7 @@ from starlette.routing import Route
 
 from app.api import actions, auth, conversations, documents, health, models, notes, tasks
 from app.config import APP_VERSION, get_settings
+from app.csrf import CSRF_HEADER, CsrfMiddleware
 from app.errors import register_error_handlers
 from app.mcp_server.http import McpEndpoint, run_mcp
 from app.services.llm.registry import get_registry
@@ -31,13 +32,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="StudyMate AI", version=APP_VERSION, lifespan=lifespan)
 
+# CSRF (SMA-58): other websites can't make your browser change anything here. Added
+# before CORS, so CORS wraps it and even a 403 from here carries the CORS headers.
+app.add_middleware(CsrfMiddleware)
+
 # CORS: the browser only lets our React app (FRONTEND_ORIGIN) read API responses.
-# One explicit origin, never "*".
+# One explicit origin, never "*". CORS is NOT CSRF protection: it stops other sites
+# reading answers, not sending requests.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", CSRF_HEADER],
 )
 
 register_error_handlers(app)

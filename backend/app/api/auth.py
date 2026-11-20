@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.config import Settings, get_settings
+from app.csrf import CSRF_COOKIE, new_csrf_token
 from app.db.session import get_db
 from app.models import User
 from app.repositories import users as repo
@@ -89,6 +90,21 @@ def start_session(response: Response, user: User, settings: Settings) -> None:
         httponly=True,  # JavaScript can't read it, so an injected script can't steal it
         samesite="lax",  # not sent with requests that other websites start (CSRF: SMA-58)
     )
+    set_csrf_cookie(response)  # a fresh CSRF token with every login
+
+
+def set_csrf_cookie(response: Response) -> None:
+    """The double-submit token (SMA-58). NOT HttpOnly on purpose: our JavaScript reads it
+    and sends it back in the X-CSRF-Token header; other websites can't read it."""
+    response.set_cookie(
+        CSRF_COOKIE,
+        new_csrf_token(),
+        max_age=int(auth.SESSION_LIFETIME.total_seconds()),
+        path="/",
+        secure=True,
+        httponly=False,
+        samesite="lax",
+    )
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
@@ -136,8 +152,18 @@ def logout(response: Response) -> None:
     response.delete_cookie(
         auth.SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax"
     )
+    response.delete_cookie(CSRF_COOKIE, path="/", secure=True, samesite="lax")
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: Annotated[User, Depends(get_current_user)]) -> User:
+def me(
+    user: Annotated[User, Depends(get_current_user)],
+    request: Request,
+    response: Response,
+    settings: AppSettings,
+) -> User:
+    # The frontend asks "who am I?" when it starts (SMA-59): a good moment to give back a
+    # CSRF cookie that went missing, so writes work again without a new login.
+    if settings.auth_mode == "jwt" and not request.cookies.get(CSRF_COOKIE):
+        set_csrf_cookie(response)
     return user

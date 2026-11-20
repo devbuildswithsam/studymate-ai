@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.deps import LOOPBACK_HOSTS
-from app.config import Settings, get_settings
+from app.config import app_settings
 from app.db.seed import find_local_user
 from app.db.session import _session_factory
 from app.errors import error_response
@@ -21,12 +21,6 @@ from app.mcp_server.context import ToolContext, acting_as
 from app.mcp_server.server import mcp_server
 from app.services.llm.embeddings import build_embedding_provider
 from app.services.llm.registry import get_registry
-
-
-def app_settings(scope: Scope) -> Settings:
-    """The app's settings, honouring the same override tests use for every route."""
-    fastapi_app = scope["app"]
-    return fastapi_app.dependency_overrides.get(get_settings, get_settings)()
 
 
 class McpEndpoint:
