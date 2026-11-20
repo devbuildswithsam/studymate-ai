@@ -149,6 +149,20 @@ with **Ctrl+C**.
 4. **Tasks via chat:** in Chat, type "Add a task to revise chapter 3 by Friday". You'll see a
    "Used tool: create_task" line and an Undo button; the task appears on the **Tasks** board.
 
+### Accounts (optional, v1.1)
+
+By default the app runs in **local mode**: one user, no login. To try real accounts
+(register, log in, log out; [ADR-0009](docs/adr/0009-self-built-auth.md)):
+
+1. Make a secret, from `backend\` with the venv active:
+   `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+2. In `backend\.env` set `AUTH_MODE=jwt` and `JWT_SECRET=` followed by that secret.
+3. Restart the API and open <http://localhost:5173>: you'll see **Log in**. Click **Create one**
+   to register; the app opens signed in. The sidebar shows who you are and a **Log out** button.
+
+Sessions last 8 hours. There is no "forgot password" yet: ask the admin. Data you made in
+local mode belongs to the local user, not to a new account. Set `AUTH_MODE=local` to go back.
+
 ### If something goes wrong
 
 | You see | Do this |

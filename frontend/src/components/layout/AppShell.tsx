@@ -3,6 +3,7 @@
 import { PlusIcon } from 'lucide-react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
+import { UserMenu } from '@/components/auth/UserMenu'
 import { HealthStatus } from '@/components/HealthStatus'
 import { NAV_ITEMS } from '@/components/layout/nav'
 import { RecentChats } from '@/components/layout/RecentChats'
@@ -44,6 +45,9 @@ export function AppShell() {
         </nav>
         <div className="mt-6 flex min-h-0 flex-1 flex-col">
           <RecentChats />
+        </div>
+        <div className="border-t pt-4">
+          <UserMenu /> {/* SMA-59: who is signed in, and Logout */}
         </div>
         <div className="px-2 pt-4">
           <HealthStatus />

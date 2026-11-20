@@ -945,3 +945,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-59 — Login and register pages, protected pages, logout
+**Date:** 20 Nov 2026
+
+**What I did**
+- Built the Login and Register pages, a `RequireAuth` gate in front of every app page, and a user menu with Log out in the sidebar.
+- The app asks the backend "who am I?" (`/api/auth/me`). Nobody → Login, then back to the page I wanted. A 401 from any request means the session may have ended, so the app asks again and shows "Your session has ended" instead of broken pages.
+- Login, register and logout wipe the cached data. In local mode nothing changes, and Log out is hidden.
+- Tests first: 16 new frontend tests; 13 mutants all caught after adding 3 tests for gaps the first run found.
+
+**What I learned**
+- **The browser gate is for comfort, the backend is the lock:** every route already checks the cookie; `RequireAuth` just shows Login instead of a page full of errors.
+- **The frontend never sees the session:** the cookie is HttpOnly, so the app can only ask "who am I?".
+- **A cache can leak data between people:** logging in as someone else must wipe it, or the next person briefly sees the last person's tasks. A test with a request that never answers proves nothing old is shown.
+- **One place catches every 401** (the query cache's onError), so no page has to handle "session ended" itself.
+- **Use the right error message for the place:** the app's general helper says "the AI is busy" for a 429, but on the login page a 429 means "too many tries".
+- **A component that still holds old data won't notice a cleared cache by itself;** logout has to move to the Login page, which asks again.
+- **Lint rule (fast refresh):** files that export React components should export only components; shared helpers go in their own file.
+
+**What confused me**
+- …

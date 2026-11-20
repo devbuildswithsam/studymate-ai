@@ -6,19 +6,38 @@ import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
 
 import { AppRoutes } from '@/App'
+import { ME_KEY, type User } from '@/api/auth'
+import { makeQueryClient } from '@/lib/queryClient'
+
+/** Who renderApp starts as: local mode's one user, like the real app in local mode. */
+export const LOCAL_USER: User = { id: 'local', email: 'local@studymate.dev', name: 'Local user' }
 
 /** Render any component with a fresh query cache (no retries: fail fast in tests). */
-export function renderWithQuery(ui: ReactNode) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+export function renderWithQuery(ui: ReactNode, queryClient = testQueryClient()) {
+  return {
+    ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>),
+    queryClient,
+  }
 }
 
-/** Render the whole app at `url`, the way main.tsx does. */
-export function renderApp(url = '/') {
+function testQueryClient(): QueryClient {
+  // The app's own cache setup (its 401 rule included), without retries.
+  return makeQueryClient({ queries: { retry: false } })
+}
+
+/**
+ * Render the whole app at `url`, the way main.tsx does.
+ * `user`: who "who am I?" already knows at the start (SMA-59). The default is the local
+ * user, so pages render at once as in local mode; `null` starts logged out.
+ */
+export function renderApp(url = '/', { user = LOCAL_USER }: { user?: User | null } = {}) {
+  const queryClient = testQueryClient()
+  if (user) queryClient.setQueryData(ME_KEY, user)
   return renderWithQuery(
     <MemoryRouter initialEntries={[url]}>
       <AppRoutes />
     </MemoryRouter>,
+    queryClient,
   )
 }
 
@@ -33,9 +52,12 @@ type FakeRoute = { status?: number; body: unknown } | ((init?: RequestInit) => P
  * Unknown paths answer 404 in our error format.
  */
 export function mockApi(routes: Record<string, FakeRoute>) {
+  // SMA-59: the app asks "who am I?" on every page. Unless a test says otherwise, the
+  // answer is the local user, as in local mode.
+  const all: Record<string, FakeRoute> = { '/api/auth/me': { body: LOCAL_USER }, ...routes }
   const fake = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
-    const route = routes[`${method} ${String(input)}`] ?? routes[String(input)]
+    const route = all[`${method} ${String(input)}`] ?? all[String(input)]
     if (typeof route === 'function') return route(init)
     if (route) return Response.json(route.body, { status: route.status ?? 200 })
     return Response.json({ error: { code: 'not_found', message: 'Not Found' } }, { status: 404 })

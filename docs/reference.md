@@ -32,6 +32,13 @@ With the API running (see the README):
     upload add it automatically. Login and register need no token (no session yet), only
     the Origin check. `GET /api/auth/me` restores a missing CSRF cookie; logout deletes it.
   - `/mcp` is skipped: programs use Bearer tokens there, never cookies (SMA-61).
+- **In the browser (SMA-59):** `/login` and `/register` are open; every other page sits
+  behind `RequireAuth` (`frontend/src/components/auth/`), which asks `GET /api/auth/me`.
+  "Nobody" → Login, then back to the page you wanted. A 401 from **any** request makes the
+  app ask again (`src/lib/queryClient.ts`), so an ended session shows "Your session has
+  ended" instead of broken pages. Login, register and logout wipe the query cache, so the
+  next person at the computer never sees the previous one's data. In local mode
+  `/api/auth/me` is the local user, so nothing changes and Log out is hidden.
 - `GET /api/models` — enabled models and their status (`available`, `rate_limited`, `no_key`)
 - `GET /api/conversations` — your conversations, most recent activity first.
   `POST` starts one (optionally `{"model": "..."}`)

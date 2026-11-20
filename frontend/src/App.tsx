@@ -3,13 +3,16 @@ import { Route, Routes, useLocation, useParams } from 'react-router'
 
 import type { DocumentRef } from '@/api/conversations'
 
+import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
 import { NAV_ITEMS } from '@/components/layout/nav'
 import { ChatPage } from '@/pages/ChatPage'
 import { DocumentPage } from '@/pages/DocumentPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
+import { LoginPage } from '@/pages/LoginPage'
 import { NotesPage } from '@/pages/NotesPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { RegisterPage } from '@/pages/RegisterPage'
 import { StudyPage } from '@/pages/StudyPage'
 import { TasksPage } from '@/pages/TasksPage'
 
@@ -60,21 +63,27 @@ const PAGES: Record<string, () => React.JSX.Element> = {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route element={<AppShell />}>
-        {NAV_ITEMS.map((item) => {
-          const Page = PAGES[item.to]
-          return (
-            <Route
-              key={item.to}
-              path={item.to}
-              element={Page ? <Page /> : <PlaceholderPage title={item.label} />}
-            />
-          )
-        })}
-        <Route path="/c/:conversationId" element={<ChatRoute />} />
-        <Route path="/study/:conversationId" element={<StudyRoute />} />
-        <Route path="/documents/:documentId" element={<DocumentPage />} />
-        <Route path="/notes/:noteId" element={<NotesPage />} />
+      {/* SMA-59: open to everyone */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      {/* Everything else needs a signed-in user (local mode: always the local user). */}
+      <Route element={<RequireAuth />}>
+        <Route element={<AppShell />}>
+          {NAV_ITEMS.map((item) => {
+            const Page = PAGES[item.to]
+            return (
+              <Route
+                key={item.to}
+                path={item.to}
+                element={Page ? <Page /> : <PlaceholderPage title={item.label} />}
+              />
+            )
+          })}
+          <Route path="/c/:conversationId" element={<ChatRoute />} />
+          <Route path="/study/:conversationId" element={<StudyRoute />} />
+          <Route path="/documents/:documentId" element={<DocumentPage />} />
+          <Route path="/notes/:noteId" element={<NotesPage />} />
+        </Route>
       </Route>
     </Routes>
   )

@@ -22,6 +22,15 @@ function headersOf(fake: ReturnType<typeof mockFetch>): Record<string, string> {
   return (init.headers ?? {}) as Record<string, string>
 }
 
+describe('an empty answer', () => {
+  it('204 No Content resolves without reading a body (e.g. logout, SMA-59)', async () => {
+    const fake = mockFetch({})
+    fake.mockImplementation(async () => new Response(null, { status: 204 }))
+
+    await expect(apiPost('/api/auth/logout', {})).resolves.toBeUndefined()
+  })
+})
+
 describe('csrfToken', () => {
   it('finds our cookie among others', () => {
     setCookie('theme=dark; path=/')

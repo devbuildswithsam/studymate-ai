@@ -76,6 +76,9 @@ async function sendJson<T>(
   if (!response.ok) {
     throw await toApiError(response)
   }
+  if (response.status === 204) {
+    return undefined as T // "No Content": e.g. logout (SMA-59) has nothing to send back
+  }
   return (await response.json()) as T
 }
 
