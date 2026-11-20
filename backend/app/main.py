@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import Route
 
-from app.api import actions, conversations, documents, health, models, notes, tasks
+from app.api import actions, auth, conversations, documents, health, models, notes, tasks
 from app.config import APP_VERSION, get_settings
 from app.errors import register_error_handlers
 from app.mcp_server.http import McpEndpoint, run_mcp
@@ -43,6 +43,7 @@ app.add_middleware(
 register_error_handlers(app)
 
 app.include_router(health.router)
+app.include_router(auth.router)  # SMA-57
 app.include_router(models.router)
 app.include_router(conversations.router)
 app.include_router(notes.router)

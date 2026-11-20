@@ -104,7 +104,8 @@ python -m scripts.seed
 |---|---|---|
 | `GROQ_API_KEY`, `GEMINI_API_KEY` | empty | Your keys. A model without a key shows as `no_key` |
 | `ENV` | `development` | `development`, `test` or `production` |
-| `AUTH_MODE` | `local` | Single user, no login, requests from this computer only. Refused when `ENV=production` |
+| `AUTH_MODE` | `local` | `local`: single user, no login, requests from this computer only (refused when `ENV=production`). `jwt`: real accounts with a login cookie (v1.1, [ADR-0009](docs/adr/0009-self-built-auth.md); the login pages arrive in SMA-59) |
+| `JWT_SECRET` | empty | Signs login sessions; needed for `AUTH_MODE=jwt`, at least 32 characters. Make one: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only origin allowed by CORS |
 | `DATABASE_URL` | `sqlite:///./app.db` | `./` is the folder you start from, so run the API and `alembic` from `backend\` |
 

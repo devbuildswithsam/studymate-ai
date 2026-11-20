@@ -38,7 +38,14 @@ class McpEndpoint:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         settings = app_settings(scope)
         if settings.auth_mode != "local":
-            raise NotImplementedError("Bearer tokens for /mcp arrive in v1.1 (guide 7.2)")
+            # Real accounts are on, but personal access tokens (SMA-61) aren't built yet:
+            # closed, never open. The session cookie isn't accepted here on purpose (/mcp
+            # is for other programs, and a cookie would make it a CSRF target).
+            response = error_response(
+                401, "/mcp needs a personal access token, which isn't available yet."
+            )
+            await response(scope, receive, send)
+            return
 
         client = scope.get("client")
         if (client[0] if client else None) not in LOOPBACK_HOSTS:

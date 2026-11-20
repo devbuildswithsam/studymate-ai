@@ -900,3 +900,25 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-57 — Accounts API: register, login, logout, session cookie
+**Date:** 20 Nov 2026
+
+**What I did**
+- Added real accounts (ADR-0009): `register`, `login`, `logout` and `me` under `/api/auth`, passwords hashed with Argon2 (pwdlib), and an 8-hour JWT (PyJWT) in an HttpOnly, Secure, SameSite=Lax cookie.
+- New `AUTH_MODE=jwt`: `get_current_user` reads the cookie; routes didn't change. `AUTH_MODE=local` works as before. The app refuses to start in `jwt` mode without a `JWT_SECRET` of at least 32 characters.
+- Login safety: the same answer and timing for "no such email" and "wrong password", and 5 failed tries lock that email and address for 15 minutes. `/mcp` stays closed in `jwt` mode until access tokens exist (SMA-61).
+- Test-first: 49 new tests, 21 mutants all caught, and a live run on a real server with a throwaway database.
+
+**What I learned**
+- **One place decides who you are:** because every route already used `get_current_user`, real login was one new branch there, not changes in every route.
+- **Every attack is a test:** expired, tampered, wrongly signed and `alg: none` tokens, guessing, and "does this email exist?" are each a test that must be refused.
+- **A test can pass for the wrong reason.** My "no expiry" token was missing two things, so removing the expiry check still passed; mutation testing found it. A control test proved my hand-set cookie really arrived.
+- **A dummy hash keeps timing equal** (about 0.5 s for every login attempt here), but its password is in the source, so login must also require a real stored hash. A test proves the dummy password opens nothing.
+- **Secure cookies are only sent over HTTPS** (browsers make an exception for localhost), so the tests talk to the app over `https://`.
+- **Name what you import:** PyJWT was already installed as a dependency of `mcp`, but we use it directly, so `requirements.txt` names it.
+
+**What confused me**
+- …

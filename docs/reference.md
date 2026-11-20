@@ -8,6 +8,19 @@ With the API running (see the README):
 
 - Interactive API docs: <http://127.0.0.1:8000/docs>
 - `GET /api/health` — status, version, env and auth mode
+- **Accounts (SMA-57, [ADR-0009](adr/0009-self-built-auth.md)), `AUTH_MODE=jwt` only:**
+  `POST /api/auth/register` `{"email", "password", "name"}` (password 8–128 characters; email
+  stored lower-case; a used email → **409**) creates the account and logs in.
+  `POST /api/auth/login` `{"email", "password"}` → the user and a session cookie; a wrong
+  password and an unknown email get the **same** 401 ("Email or password is incorrect.") and
+  take the same time; 5 failures for one email from one address → **429** for 15 minutes.
+  `POST /api/auth/logout` deletes the cookie (204). `GET /api/auth/me` → the signed-in user
+  (in local mode: the local user). In local mode, register and login answer 400.
+- **The session cookie** `studymate_session`: a JWT (HS256, signed with `JWT_SECRET`, 8 hours)
+  that is `HttpOnly` (JavaScript can't read it), `Secure`, `SameSite=Lax`. In `jwt` mode every
+  route without a valid cookie answers **401**; expired, tampered, wrongly signed and
+  `alg: none` tokens are refused. Passwords are stored only as Argon2id hashes (pwdlib).
+  `/mcp` answers 401 in `jwt` mode until personal access tokens exist (SMA-61).
 - `GET /api/models` — enabled models and their status (`available`, `rate_limited`, `no_key`)
 - `GET /api/conversations` — your conversations, most recent activity first.
   `POST` starts one (optionally `{"model": "..."}`)

@@ -13,6 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]  # app -> backend
 APP_VERSION = "1.0.0"
+MIN_SECRET_LENGTH = 32  # characters of JWT_SECRET (ADR-0009)
 
 
 class Settings(BaseSettings):
@@ -28,7 +29,11 @@ class Settings(BaseSettings):
     )
 
     env: Literal["development", "test", "production"] = "development"
-    auth_mode: Literal["local"] = "local"  # real auth arrives in Stage 5
+    # local: one seeded user, this computer only (development). jwt: real accounts with a
+    # session cookie (SMA-57, ADR-0009).
+    auth_mode: Literal["local", "jwt"] = "local"
+    # Signs the session tokens. Anyone who knows it can log in as anyone: keep it in .env.
+    jwt_secret: SecretStr | None = None
     frontend_origin: str = "http://localhost:5173"
     # SQLite file next to where you start the app (run uvicorn/alembic from backend/). SMA-27.
     database_url: str = "sqlite:///./app.db"
@@ -42,6 +47,19 @@ class Settings(BaseSettings):
         # AUTH_MODE=local trusts every request as one user: never allow it outside dev.
         if self.auth_mode == "local" and self.env == "production":
             raise ValueError("AUTH_MODE=local is not allowed when ENV=production")
+        return self
+
+    @model_validator(mode="after")
+    def jwt_mode_needs_a_strong_secret(self) -> "Settings":
+        # A short or missing secret could be guessed, and then any token could be forged.
+        if self.auth_mode == "jwt":
+            secret = self.jwt_secret.get_secret_value() if self.jwt_secret else ""
+            if len(secret) < MIN_SECRET_LENGTH:
+                raise ValueError(
+                    f"AUTH_MODE=jwt needs JWT_SECRET in backend/.env, at least "
+                    f"{MIN_SECRET_LENGTH} characters. Make one with: "
+                    'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+                )
         return self
 
 
