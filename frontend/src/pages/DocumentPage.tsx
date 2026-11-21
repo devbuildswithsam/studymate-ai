@@ -56,12 +56,20 @@ export function DocumentPage() {
           </p>
         </div>
         {ready && (
-          <Button asChild variant="outline">
-            {/* Opens a new study chat with this document already picked (SMA-49). */}
-            <Link to="/study" state={{ documents: [{ id: doc.id, filename: doc.filename }] }}>
-              Chat with this document
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              {/* Opens a new study chat with this document already picked (SMA-49). */}
+              <Link to="/study" state={{ documents: [{ id: doc.id, filename: doc.filename }] }}>
+                Chat with this document
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              {/* SMA-63: the Quizzes page, with this document already picked. */}
+              <Link to="/quizzes" state={{ documentId: doc.id }}>
+                Make a quiz
+              </Link>
+            </Button>
+          </div>
         )}
       </header>
 

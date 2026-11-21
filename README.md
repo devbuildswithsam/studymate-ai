@@ -24,6 +24,8 @@ create study tasks and notes for you through **MCP tools**.
 - **Tasks and notes, created by the AI:** "Add a task to revise chapter 3 by Friday" calls
   the app's own MCP tools. New items get an **Undo** button; changes to existing ones wait for
   you on a **confirmation card**. Text inside documents or notes can never trigger a write.
+- **Quizzes:** multiple-choice questions written from one of your documents (5 or 10), each
+  with an explanation and its page; take a quiz, see your score, try again (best scores kept).
 - **Notes** (search, tags, "Save as note" on any answer) and a **Tasks** board
   (To do / Doing / Done).
 - An **evaluation harness** that scores answers, citations and retrieval on 30 fixed questions

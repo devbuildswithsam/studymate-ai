@@ -1035,3 +1035,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-63 — Quizzes from a document: validated JSON and a Quiz page
+**Date:** 21 Nov 2026
+
+**What I did**
+- The AI writes multiple-choice quizzes (5 or 10 questions) from a document: 4 different options, the right answer, an explanation and the source page per question.
+- Its JSON is checked with Pydantic; a bad answer gets one "repair" retry that shows the model what was wrong, and a second bad answer is a clear error. Pages the model wasn't shown become unknown.
+- New tables `quizzes` and `quiz_attempts` (migration reviewed); the answers stay on the server and are only returned after an attempt is scored. Attempts are saved for Progress.
+- A Quizzes page (make, list with best scores, delete), a page to take a quiz (score, explanations, Try again), and "Make a quiz" on each document.
+- Tests first: 13 service + 14 API + isolation cases (both versions) + 6 frontend tests; a live run with Groq on the photosynthesis PDF (5 and 10 questions, valid first time, about 4 s).
+
+**What I learned**
+- **Structured output is a contract:** asking for JSON isn't enough; the app must check every rule (4 different options, answer 0–3, the right count) before using it.
+- **Repair beats repeat:** a retry that includes the model's own bad reply and the exact problem fixes it far more often than asking the same thing again. One retry only, to protect the free quota.
+- **Grounding needs labels:** page labels in the prompt let us check the model's sources; a page it never saw is set to unknown instead of trusted.
+- **Keep the answers on the server:** if the browser got the answers with the questions, anyone could peek in DevTools; scoring on the server keeps the quiz honest.
+- **Fixture order matters in tests:** the fake quiz AI set up before the upload also answered the upload's summary step and added a call.
+- **A chunk only knows its first page,** so a quiz question (like a citation) points to where its chunk starts.
+
+**What confused me**
+- …

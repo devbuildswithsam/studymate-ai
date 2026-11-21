@@ -10,6 +10,7 @@ from app.models.conversation import Conversation, Message
 from app.models.document import Chunk, Document, conversation_documents
 from app.models.llm_call import LLMCall
 from app.models.note import Note
+from app.models.quiz import Quiz, QuizAttempt
 from app.models.task import Task
 from app.models.user import User
 
@@ -22,6 +23,8 @@ __all__ = [
     "LLMCall",
     "Message",
     "Note",
+    "Quiz",
+    "QuizAttempt",
     "Task",
     "User",
     "conversation_documents",

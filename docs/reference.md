@@ -97,6 +97,19 @@ With the API running (see the README):
   excerpts). They are stored on the document: viewing it never calls the AI.
   `POST /api/documents/{id}/summary` with `{"style": "short" | "detailed"}` regenerates them
   on request. If the AI fails, the document is still Ready (and searchable), without a summary.
+- **Quizzes (SMA-63, `app/services/quiz.py`, `app/api/quizzes.py`):**
+  `POST /api/quizzes` `{"document_id", "questions": 5 | 10}` makes one from a **ready**
+  document (409 otherwise). The AI gets the document's chunks labelled `[page N]` inside
+  `<document>` tags (long documents: evenly spaced excerpts) and must answer in JSON: each
+  question has exactly 4 different options, `answer` 0–3, an explanation and a page. The
+  answer is checked with Pydantic; a bad one gets **one** repair retry that says what was
+  wrong, a second bad one is a 503 with a clear message (nothing saved; both calls logged,
+  mode `quiz`). A page the model wasn't shown becomes `null`. `GET /api/quizzes` lists mine
+  with attempts, best and last score; `GET /api/quizzes/{id}` returns the questions and
+  options **without the answers**; `POST /api/quizzes/{id}/attempts` `{"answers": [0-3 or
+  null, one per question]}` is scored on the server and only then returns the right answers,
+  explanations and pages (saved for Progress); `DELETE /api/quizzes/{id}` deletes it and its
+  attempts. Deleting the document keeps its quizzes (they have their own copy).
 - `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)
   is embedded again, continuing where it stopped. One embedding model only, never a fallback:
   `gemini-embedding-2`, 768 float32 numbers per chunk ([ADR-0008](docs/adr/0008-gemini-embedding-2-at-768.md)).

@@ -30,6 +30,8 @@ from app.models import (
     LLMCall,
     Message,
     Note,
+    Quiz,
+    QuizAttempt,
     Task,
     User,
 )
@@ -137,8 +139,29 @@ def alices_data(api, two_users, db_session) -> dict[str, str]:
     assert document["status"] == "ready", document  # really searchable
     document_id = document["id"]
     token_id = client.post("/api/tokens", json={"name": "Alice's MCP"}).json()["id"]  # SMA-61
+    # SMA-63: a quiz (stored directly: this suite's fake AI doesn't answer in JSON) + an attempt.
+    quiz = Quiz(
+        user_id=alice.id,
+        document_id=document_id,
+        document_name="Alice's notes.md",
+        title="Alice's quiz",
+        questions=[
+            {
+                "question": "What increases?",
+                "options": ["Entropy", "Mass", "Time", "Light"],
+                "answer": 0,
+                "explanation": "Alice's notes say so.",
+                "page": None,
+            }
+        ],
+    )
+    db_session.add(quiz)
+    db_session.flush()
+    db_session.add(QuizAttempt(quiz_id=quiz.id, user_id=alice.id, answers=[0], score=1, total=1))
+    db_session.commit()
     return {
         "token": token_id,
+        "quiz": quiz.id,
         "conversation": conversation_id,
         "message": reply["message_id"],
         "note": note_id,
@@ -164,6 +187,8 @@ def fingerprint(db_session) -> dict:
         "actions": db_session.execute(select(AgentAction.id, AgentAction.status)).all(),
         "documents": db_session.execute(select(Document.id, Document.filename)).all(),
         "tokens": db_session.execute(select(AccessToken.id, AccessToken.name)).all(),
+        "quizzes": db_session.execute(select(Quiz.id, Quiz.title)).all(),
+        "quiz_attempts": db_session.execute(select(QuizAttempt.id, QuizAttempt.score)).all(),
     }
 
 
@@ -191,6 +216,9 @@ ISOLATION_CASES = [
     ("POST", "/api/documents/{document_id}/retry", None),  # SMA-46
     ("POST", "/api/documents/{document_id}/summary", {"style": "short"}),  # SMA-50
     ("DELETE", "/api/tokens/{token_id}", None),  # SMA-61
+    ("GET", "/api/quizzes/{quiz_id}", None),  # SMA-63
+    ("POST", "/api/quizzes/{quiz_id}/attempts", {"answers": [0]}),
+    ("DELETE", "/api/quizzes/{quiz_id}", None),
 ]
 
 
@@ -202,6 +230,7 @@ def fill(path: str, ids: dict[str, str]) -> str:
         action_id=ids["action"],
         document_id=ids["document"],
         token_id=ids["token"],
+        quiz_id=ids["quiz"],
     )
 
 
@@ -236,6 +265,7 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
         "action": UNKNOWN_ID,
         "document": UNKNOWN_ID,
         "token": UNKNOWN_ID,
+        "quiz": UNKNOWN_ID,
     }
 
     alices = client.request(method, fill(path, alices_data), json=body)
@@ -274,6 +304,7 @@ def test_b_s_lists_and_search_do_not_show_a_s_items(api, two_users, alices_data)
     assert client.get("/api/tasks").json() == []
     assert client.get("/api/tasks", params={"status": "todo"}).json() == []
     assert client.get("/api/documents").json() == []
+    assert client.get("/api/quizzes").json() == []  # SMA-63
 
 
 def test_b_cannot_save_a_note_from_a_s_message(api, two_users, alices_data, db_session):
