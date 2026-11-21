@@ -1,5 +1,6 @@
 // The conversation: user bubbles on the right, AI answers on the left. SMA-25.
 import type { ActionVerb, AgentAction } from '@/api/actions'
+import type { LiveAnswer } from '@/api/chat'
 import { ActionCards } from '@/components/chat/ActionCards'
 import { CopyButton } from '@/components/chat/CopyButton'
 import { Markdown } from '@/components/chat/Markdown'
@@ -20,6 +21,7 @@ type Props = {
   // SMA-49, study answers: a citation chip was clicked; "Answer from general knowledge".
   onCitation?: (messageId: string, n: number) => void
   onAnswerGenerally?: (question: string) => void
+  live?: LiveAnswer | null // SMA-62: the answer while it is being written
 }
 
 export function MessageList({
@@ -29,7 +31,10 @@ export function MessageList({
   onAction,
   onCitation,
   onAnswerGenerally,
+  live = null,
 }: Props) {
+  // "Thinking…" only until the first words (or tool steps) of the answer arrive.
+  const writing = live !== null && (live.text !== '' || live.toolCalls.length > 0)
   return (
     <div className="flex flex-col gap-4">
       <ol aria-label="Messages" className="flex flex-col gap-4">
@@ -84,8 +89,19 @@ export function MessageList({
             </li>
           )
         })}
+        {writing && live && (
+          // aria-busy: screen readers wait for the finished answer instead of reading
+          // every new word aloud.
+          <li className="flex justify-start" aria-busy="true">
+            <div className="max-w-[80%] rounded-2xl bg-muted px-4 py-3">
+              <p className="mb-1 text-xs font-medium opacity-70">StudyMate</p>
+              {live.text && <Markdown>{live.text}</Markdown>}
+              {live.toolCalls.length > 0 && <ToolCalls calls={live.toolCalls} />}
+            </div>
+          </li>
+        )}
       </ol>
-      {isThinking && (
+      {isThinking && !writing && (
         <p role="status" className="animate-pulse text-sm text-muted-foreground">
           StudyMate is thinking…
         </p>

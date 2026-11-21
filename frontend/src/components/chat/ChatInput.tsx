@@ -1,5 +1,5 @@
 // The message box: Enter sends, Shift+Enter adds a new line. SMA-25.
-import { SendIcon } from 'lucide-react'
+import { SendIcon, SquareIcon } from 'lucide-react'
 import type { FormEvent, KeyboardEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,9 @@ type Props = {
   onSend: () => void
   disabled?: boolean // e.g. while waiting for an answer
   placeholder?: string // SMA-49: the study chat asks about its documents
+  // SMA-62: while an answer is written, Send becomes Stop.
+  answering?: boolean
+  onStop?: () => void
 }
 
 export function ChatInput({
@@ -20,6 +23,8 @@ export function ChatInput({
   onSend,
   disabled = false,
   placeholder = 'Ask StudyMate anything… (Enter to send, Shift+Enter for a new line)',
+  answering = false,
+  onStop,
 }: Props) {
   const canSend = !disabled && value.trim().length > 0
 
@@ -48,9 +53,16 @@ export function ChatInput({
         placeholder={placeholder}
         className="min-h-12 flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       />
-      <Button type="submit" disabled={!canSend} aria-label="Send">
-        <SendIcon />
-      </Button>
+      {answering && onStop ? (
+        // type="button": Stop must never submit the form.
+        <Button type="button" variant="outline" onClick={onStop} aria-label="Stop" title="Stop">
+          <SquareIcon />
+        </Button>
+      ) : (
+        <Button type="submit" disabled={!canSend} aria-label="Send">
+          <SendIcon />
+        </Button>
+      )}
     </form>
   )
 }

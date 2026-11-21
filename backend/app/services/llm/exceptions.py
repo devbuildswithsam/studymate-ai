@@ -42,3 +42,16 @@ class AllModelsFailedError(LLMError):
         super().__init__(message, provider="fallback")
         self.reasons = reasons
         self.attempts = attempts or []  # every call made (fallback.Attempt), for llm_calls
+
+
+class AnswerInterruptedError(LLMError):
+    """A streamed answer failed after part of it had arrived (SMA-62).
+
+    No fallback then: another model would start a different answer, and the student has
+    already read the first one. The part that arrived is kept and saved.
+    """
+
+    def __init__(self, message: str, partial_text: str, attempts: list | None = None):
+        super().__init__(message, provider="stream")
+        self.partial_text = partial_text
+        self.attempts = attempts or []

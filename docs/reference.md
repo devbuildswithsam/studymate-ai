@@ -48,6 +48,17 @@ With the API running (see the README):
   `model` and `allow_fallback`, default `true`). Returns the reply, which model answered,
   whether a fallback was used, and token counts. The question and answer are saved, and every
   model call (failed ones too) is logged in `llm_calls`.
+  **Streaming (SMA-62):** with `Accept: text/event-stream` the same request answers as
+  Server-Sent Events: `token` `{"text"}` pieces as the AI writes, `tool` (a tool step, as it
+  runs), then `done` (the saved answer, same fields as the JSON reply plus `stopped`) or
+  `error` (`{"error": {code, message}, "message_id"}`). Plain chat, tool chat and study chat
+  all stream; a study answer streams as written, then its citations are checked and `done`
+  carries the checked version. Fallback works only **before the first piece**: after it, a
+  failure keeps what arrived, saved and marked *(The answer was cut off…)* (`message_id` set).
+- `POST /api/conversations/{id}/stop` — the **Stop** button (SMA-62): ends the answer being
+  written; what arrived is saved, marked *(Stopped)*, and `done` says `stopped: true`. 202, or
+  404 when nothing is being written. Closing the tab stops it the same way. The Stop switches
+  live in the server's memory (one process; several would need a shared store, Stage 6).
 - `POST /api/conversations/{id}/title` — the AI names the chat after its first message
   (3–6 words; the first words of the message if the AI can't). A title that's already set,
   e.g. one you renamed, is never replaced.

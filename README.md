@@ -13,8 +13,9 @@ create study tasks and notes for you through **MCP tools**.
 ## What it does
 
 - **Chat** with a free AI model (Groq GPT-OSS 120B by default, Gemini 3.5 Flash as an
-  automatic fallback). Markdown and maths, a model selector, and badges showing which model
-  answered. Chats are saved and get short AI titles.
+  automatic fallback). Answers appear word by word as they're written, with a **Stop**
+  button. Markdown and maths, a model selector, and badges showing which model answered.
+  Chats are saved and get short AI titles.
 - **Documents:** upload PDF, TXT or Markdown files (up to 4 MB) and watch them being read,
   split into chunks and embedded. Each one gets an AI **summary and key points**.
 - **Study:** pick documents and ask questions. Answers come only from those documents, with

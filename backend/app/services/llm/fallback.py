@@ -12,9 +12,17 @@ from functools import lru_cache
 from typing import Literal
 
 from app.config import get_settings
-from app.services.llm.base import Capability, ChatOptions, ChatResponse, LLMProvider, Message
+from app.services.llm.base import (
+    Capability,
+    ChatOptions,
+    ChatResponse,
+    LLMProvider,
+    Message,
+    TextStream,
+)
 from app.services.llm.exceptions import (
     AllModelsFailedError,
+    AnswerInterruptedError,
     LLMConfigError,
     LLMError,
     ProviderTimeoutError,
@@ -118,7 +126,14 @@ class FallbackManager:
         model_id: str | None = None,
         needs: Iterable[Capability] = (),
         allow_fallback: bool = True,  # False: try only the chosen model (SMA-26 toggle)
+        stream: TextStream | None = None,  # SMA-62: send the answer piece by piece
     ) -> ChatResult:
+        """Ask the models in order until one answers.
+
+        With a stream, falling back is only possible while nothing has been shown: after
+        the first piece, a failure raises AnswerInterruptedError with the part that
+        arrived, instead of starting a second, different answer.
+        """
         candidates = self.candidates(model_id, needs)
         if not allow_fallback:
             candidates = candidates[:1]
@@ -137,7 +152,11 @@ class FallbackManager:
             started = self.clock()
             is_fallback = model.id != candidates[0].id
             try:
-                response = self._provider(model).chat(messages, options)
+                provider = self._provider(model)
+                if stream is None:
+                    response = provider.chat(messages, options)
+                else:
+                    response = provider.chat_stream(messages, options, stream)
             except LLMError as e:
                 attempts.append(
                     Attempt(
@@ -149,7 +168,13 @@ class FallbackManager:
                         is_fallback,
                     )
                 )
-                reasons.append(self._handle_failure(model, e))
+                reason = self._handle_failure(model, e)
+                if stream is not None and stream.text:
+                    # Part of the answer is already on screen: keep it, don't switch.
+                    raise AnswerInterruptedError(
+                        f"The answer was cut off ({reason})", stream.text, attempts
+                    ) from e
+                reasons.append(reason)
             else:
                 attempts.append(
                     Attempt(

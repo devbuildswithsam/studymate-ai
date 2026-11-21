@@ -1,9 +1,14 @@
 // Turn any error into a sentence a student understands. SMA-25.
+import { StreamError } from '@/api/chat'
 import { ApiError } from '@/api/client'
 
 const UNREACHABLE = "Can't reach the server. Is the backend running?"
 
 export function friendlyError(error: unknown): string {
+  if (error instanceof StreamError && error.messageId) {
+    // SMA-62: an answer cut off halfway was saved; its own message says what happened.
+    return error.message
+  }
   if (error instanceof ApiError) {
     if (error.status === 502 || error.status === 504) {
       // The dev proxy answers 502/504 (empty body) when FastAPI isn't running.

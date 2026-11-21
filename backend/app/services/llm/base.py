@@ -5,6 +5,7 @@ The rest of the app only talks to LLMProvider, so swapping Gemini for Groq
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -55,6 +56,24 @@ class ChatResponse:
     provider: str
     latency_ms: int
     tool_calls: list[ToolCall] = field(default_factory=list)  # empty = a final answer
+    stopped: bool = False  # SMA-62: the student pressed Stop; `text` is what arrived
+
+
+@dataclass
+class TextStream:
+    """Where a streamed answer goes, piece by piece (SMA-62).
+
+    The provider calls send() for every piece of text and asks should_stop() between
+    pieces (the Stop button). `text` is everything sent so far for this answer.
+    """
+
+    on_text: Callable[[str], None]
+    should_stop: Callable[[], bool] = lambda: False
+    text: str = ""
+
+    def send(self, piece: str) -> None:
+        self.text += piece
+        self.on_text(piece)
 
 
 class LLMProvider(ABC):
@@ -74,3 +93,16 @@ class LLMProvider(ABC):
     @abstractmethod
     def chat(self, messages: list[Message], options: ChatOptions | None = None) -> ChatResponse:
         """Send the conversation, get one answer back. Raises an LLMError subclass on failure."""
+
+    def chat_stream(
+        self, messages: list[Message], options: ChatOptions | None, stream: TextStream
+    ) -> ChatResponse:
+        """Like chat(), but the text goes to `stream` as it arrives (SMA-62).
+
+        This default can't really stream: it waits for the whole answer and sends it in
+        one piece. Providers that can stream (openai_compat.py, the fake) override it.
+        """
+        response = self.chat(messages, options)
+        if response.text:
+            stream.send(response.text)
+        return response

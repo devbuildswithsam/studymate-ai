@@ -4,7 +4,10 @@ GET/POST   /api/conversations            list mine / start one
 GET        /api/conversations/{id}       one conversation with its messages
 PATCH      /api/conversations/{id}       rename
 DELETE     /api/conversations/{id}       delete (its messages too)
-POST       /api/conversations/{id}/messages   ask the AI; question + answer are saved
+POST       /api/conversations/{id}/messages   ask the AI; question + answer are saved.
+           With `Accept: text/event-stream` the answer streams (SMA-62): events token /
+           tool / done / error, as Server-Sent Events. Otherwise one JSON object.
+POST       /api/conversations/{id}/stop       Stop the answer being written (SMA-62)
 POST       /api/conversations/{id}/title      AI title from the first message (SMA-31)
 
 The user comes only from get_current_user_id, never from the request. Each request is one
@@ -13,13 +16,15 @@ transaction: the repositories never commit, these routes commit once at the end.
 
 import functools
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
@@ -27,14 +32,21 @@ from app.api.actions import ActionOut
 from app.api.deps import get_current_user_id
 from app.config import Settings, get_settings
 from app.db.session import _session_factory, get_db
+from app.errors import CODES_BY_STATUS
 from app.mcp_server.context import ToolContext
 from app.models import Conversation
 from app.repositories import conversations as repo
+from app.services import chat_streams
 from app.services.actions import record_actions
 from app.services.agent import ToolStep, run_agent_for_user
-from app.services.llm.base import ChatOptions, ChatResponse, Message
+from app.services.chat_streams import CUT_OFF_NOTE, STOPPED_NOTE
+from app.services.llm.base import ChatOptions, ChatResponse, Message, TextStream
 from app.services.llm.embeddings import EmbeddingProvider, get_embedder
-from app.services.llm.exceptions import AllModelsFailedError, LLMConfigError
+from app.services.llm.exceptions import (
+    AllModelsFailedError,
+    AnswerInterruptedError,
+    LLMConfigError,
+)
 from app.services.llm.fallback import Attempt, FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
 from app.services.study import StudyError, answer_from_documents
@@ -42,6 +54,7 @@ from app.services.titles import generate_title
 from app.services.tool_policy import asks_to_act
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are StudyMate, a friendly study assistant for college students. "
@@ -185,6 +198,7 @@ class ChatReply(BaseModel):
     fallback_reason: str | None
     tokens_in: int
     tokens_out: int
+    stopped: bool = False  # SMA-62: the student pressed Stop; `reply` is what arrived
 
 
 # --- Conversations CRUD ------------------------------------------------------------
@@ -254,23 +268,111 @@ def delete_conversation(conversation_id: str, user_id: CurrentUserId, db: Db) ->
 # --- Chat --------------------------------------------------------------------------
 
 
+@dataclass
+class Turn:
+    """Everything one chat message needs, whichever way it is answered (SMA-62)."""
+
+    user_id: str
+    request: SendMessage
+    model_id: str | None
+    registry: ModelRegistry
+    manager: FallbackManager
+    settings: Settings
+    embedder: Callable[[], EmbeddingProvider]
+    stream: TextStream | None = None  # None: answer in one piece (JSON)
+    on_tool: Callable[[ToolStep], None] | None = None
+    token: Any = None  # the event loop's token, when called from a stream's own thread
+
+
+class AnswerCutOff(Exception):
+    """A streamed answer failed halfway: what arrived was saved (as message_id)."""
+
+    def __init__(self, message: str, message_id: str):
+        super().__init__(message)
+        self.message_id = message_id
+
+
 @router.post("/{conversation_id}/messages", response_model=ChatReply)
 def send_message(
     conversation_id: str,
     request: SendMessage,
+    http_request: Request,
     user_id: CurrentUserId,
     db: Db,
     registry: Registry,
     manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
     settings: Annotated[Settings, Depends(get_settings)],
     embedder: Annotated[Callable[[], EmbeddingProvider], Depends(get_embedder)],
-) -> ChatReply:
+) -> ChatReply | StreamingResponse:
+    # Checked first, so a wrong id or model is a normal 404/400, never a broken stream.
     conversation = my_conversation(db, user_id, conversation_id)
     model_id = choose_model(request, conversation, registry)
-    if conversation.mode == "study" and not request.general:
-        return study_answer(
-            db, user_id, conversation, request, model_id, registry, manager, embedder
+    turn = Turn(user_id, request, model_id, registry, manager, settings, embedder)
+    if "text/event-stream" in http_request.headers.get("accept", ""):
+        return stream_reply(http_request, conversation_id, turn)  # SMA-62
+    return chat_turn(db, conversation, turn)
+
+
+@router.post("/{conversation_id}/stop", status_code=202)
+def stop_answer(conversation_id: str, user_id: CurrentUserId, db: Db) -> Response:
+    """The Stop button (SMA-62): end the answer being written; what arrived is kept."""
+    my_conversation(db, user_id, conversation_id)  # someone else's chat: 404
+    if not chat_streams.stop(user_id, conversation_id):
+        raise HTTPException(404, "No answer is being written in this chat.")
+    return Response(status_code=202)
+
+
+def stream_reply(http_request: Request, conversation_id: str, turn: Turn) -> StreamingResponse:
+    """Answer as Server-Sent Events: token pieces, tool steps, then done (or error)."""
+    switch = chat_streams.start(turn.user_id, conversation_id)
+
+    def work(emit: chat_streams.Emit, token) -> None:  # runs in its own thread
+        turn.stream = TextStream(
+            on_text=lambda piece: emit("token", {"text": piece}), should_stop=switch.is_set
         )
+        turn.on_tool = lambda step: emit("tool", tool_call_out(step).model_dump())
+        turn.token = token
+        try:
+            # Its own session: the request's closes when the route returns, before this.
+            with _session_factory(turn.settings.database_url)() as db:
+                conversation = my_conversation(db, turn.user_id, conversation_id)
+                reply = chat_turn(db, conversation, turn)
+            emit("done", reply.model_dump(mode="json"))
+        except AnswerCutOff as e:
+            emit("error", error_event(503, str(e), e.message_id))
+        except HTTPException as e:  # e.g. every model failed (503), a study problem (400)
+            emit("error", error_event(e.status_code, str(e.detail)))
+        except Exception:
+            logger.exception("Streaming an answer failed")
+            emit("error", error_event(500, "Something went wrong on our side."))
+        finally:
+            chat_streams.finish(turn.user_id, conversation_id, switch)
+
+    return StreamingResponse(
+        chat_streams.event_stream(http_request, work, switch),
+        media_type="text/event-stream",
+        # Don't let a proxy hold the events back to send them all at once.
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def error_event(status: int, message: str, message_id: str | None = None) -> dict:
+    """An error in the API's usual shape, plus the saved partial answer's id (if any)."""
+    code = CODES_BY_STATUS.get(status, "error")
+    return {"error": {"code": code, "message": message}, "message_id": message_id}
+
+
+def finished_text(text: str, stopped: bool) -> str:
+    """The answer as saved: a stopped one says so (shown again when the chat is reopened)."""
+    return (text.rstrip() + STOPPED_NOTE).strip() if stopped else text
+
+
+def chat_turn(db: Session, conversation: Conversation, turn: Turn) -> ChatReply:
+    """Ask the AI and save the question and answer (one JSON reply, or streamed)."""
+    request, model_id, registry = turn.request, turn.model_id, turn.registry
+    user_id, conversation_id = turn.user_id, conversation.id
+    if conversation.mode == "study" and not request.general:
+        return study_answer(db, conversation, turn)
     # SMA-42: a model that can call tools gets the app's MCP tools (only those models).
     uses_tools = model_id is not None and registry.get(model_id).supports("tools")
 
@@ -288,22 +390,25 @@ def send_message(
             # The tools act for THIS request's user, set by us, never chosen by the AI.
             context = ToolContext(
                 user_id,
-                _session_factory(settings.database_url),
-                make_embedder=embedder,  # SMA-48: search_documents embeds the question
+                _session_factory(turn.settings.database_url),
+                make_embedder=turn.embedder,  # SMA-48: search_documents embeds the question
             )
-            outcome = ask_with_tools(context, manager, messages, model_id, request, options)
+            outcome = ask_with_tools(context, messages, turn, options)
         else:
-            outcome = ask(manager, messages, model_id, request, options)
+            outcome = ask(messages, turn, options)
     except AllModelsFailedError as e:
         # Keep the record of the failed calls, but save no half-turn (no question alone).
         repo.log_llm_calls(db, user_id, conversation_id, e.attempts, call_mode(uses_tools))
         db.commit()
         raise HTTPException(503, f"The AI is unavailable right now ({e})") from e
+    except AnswerInterruptedError as e:  # SMA-62: failed halfway through a streamed answer
+        raise save_cut_off(db, conversation, turn, e, MODE, call_mode(uses_tools)) from e
     except LLMConfigError as e:  # e.g. the chosen model is disabled
         raise HTTPException(400, str(e)) from e
     answer = outcome.response
     tool_calls = [tool_call_out(step) for step in outcome.steps]
     mode = "tool" if tool_calls else MODE
+    text = finished_text(answer.text, answer.stopped)  # SMA-62: "(Stopped)" if stopped
 
     # One transaction: the question, the answer and the call log are saved together, or
     # (if anything fails before commit) not at all.
@@ -314,7 +419,7 @@ def send_message(
         db,
         conversation,
         role="assistant",
-        content=answer.text,
+        content=text,
         provider=answer.provider,
         model=answer.model,
         mode=mode,
@@ -331,7 +436,7 @@ def send_message(
     return ChatReply(
         conversation_id=conversation_id,
         message_id=saved_answer.id,
-        reply=answer.text,
+        reply=text,
         provider=answer.provider,
         model=answer.model,
         mode=mode,
@@ -341,16 +446,45 @@ def send_message(
         fallback_reason=outcome.fallback_reason,
         tokens_in=outcome.tokens_in,
         tokens_out=outcome.tokens_out,
+        stopped=answer.stopped,
     )
+
+
+def save_cut_off(
+    db: Session,
+    conversation: Conversation,
+    turn: Turn,
+    error: AnswerInterruptedError,
+    mode: str,
+    log_mode: str,
+) -> AnswerCutOff:
+    """A streamed answer failed halfway (SMA-62): the student already read part of it, so
+    save the question and that part, marked as cut off, plus the call log."""
+    failed = error.attempts[-1] if error.attempts else None
+    repo.add_message(db, conversation, role="user", content=turn.request.message)
+    saved = repo.add_message(
+        db,
+        conversation,
+        role="assistant",
+        content=error.partial_text.rstrip() + CUT_OFF_NOTE,
+        provider=failed.provider if failed else None,
+        model=failed.model if failed else None,
+        mode=mode,
+        fallback_used=failed.fallback_used if failed else False,
+    )
+    repo.log_llm_calls(db, turn.user_id, conversation.id, error.attempts, log_mode)
+    db.commit()
+    return AnswerCutOff(str(error), saved.id)
 
 
 # --- Study chats: answers from the documents (SMA-49) ---------------------------------
 
 
-def study_answer(
-    db, user_id, conversation, request, model_id, registry, manager, embedder
-) -> ChatReply:
-    """A study chat's answer: grounded in its documents, citations checked (study.py)."""
+def study_answer(db: Session, conversation: Conversation, turn: Turn) -> ChatReply:
+    """A study chat's answer: grounded in its documents, citations checked (study.py).
+    Streamed (SMA-62): the text streams as written, then the check runs on the whole
+    answer, and the `done` event carries the checked version."""
+    user_id, request, model_id = turn.user_id, turn.request, turn.model_id
     history = [
         {"role": m.role, "content": m.content}
         for m in repo.recent_messages(db, user_id, conversation.id, MAX_HISTORY_MESSAGES)
@@ -362,10 +496,11 @@ def study_answer(
             repo.document_ids_of(db, conversation.id),
             request.message,
             history,
-            manager,
+            turn.manager,
             model_id,
             request.allow_fallback,
-            embedder,
+            turn.embedder,
+            stream=turn.stream,
         )
     except StudyError as e:
         raise HTTPException(e.status, e.message) from e
@@ -373,17 +508,22 @@ def study_answer(
         repo.log_llm_calls(db, user_id, conversation.id, e.attempts, "grounded")
         db.commit()
         raise HTTPException(503, f"The AI is unavailable right now ({e})") from e
+    except AnswerInterruptedError as e:  # SMA-62
+        raise save_cut_off(db, conversation, turn, e, "grounded", "grounded") from e
     except LLMConfigError as e:
         raise HTTPException(400, str(e)) from e
 
+    stopped = answer.response.stopped
+    text = finished_text(answer.text, stopped)
     if request.model:  # the user switched models: remember it for this conversation
-        conversation.provider, conversation.model = registry.get(model_id).provider, model_id
+        conversation.provider = turn.registry.get(model_id).provider
+        conversation.model = model_id
     repo.add_message(db, conversation, role="user", content=request.message)
     saved = repo.add_message(
         db,
         conversation,
         role="assistant",
-        content=answer.text,
+        content=text,
         provider=answer.response.provider,
         model=answer.response.model,
         mode="grounded",
@@ -397,7 +537,7 @@ def study_answer(
     return ChatReply(
         conversation_id=conversation.id,
         message_id=saved.id,
-        reply=answer.text,
+        reply=text,
         provider=answer.response.provider,
         model=answer.response.model,
         mode="grounded",
@@ -406,6 +546,7 @@ def study_answer(
         fallback_reason=answer.fallback_reason,
         tokens_in=answer.tokens_in,
         tokens_out=answer.tokens_out,
+        stopped=stopped,
     )
 
 
@@ -433,8 +574,14 @@ class Outcome:
     steps: list[ToolStep] = field(default_factory=list)
 
 
-def ask(manager, messages: list[Message], model_id, request: SendMessage, options) -> Outcome:
-    result = manager.chat(messages, options, model_id, allow_fallback=request.allow_fallback)
+def ask(messages: list[Message], turn: Turn, options) -> Outcome:
+    result = turn.manager.chat(
+        messages,
+        options,
+        turn.model_id,
+        allow_fallback=turn.request.allow_fallback,
+        stream=turn.stream,
+    )
     answer = result.response
     return Outcome(
         answer,
@@ -446,24 +593,26 @@ def ask(manager, messages: list[Message], model_id, request: SendMessage, option
     )
 
 
-def ask_with_tools(
-    context: ToolContext, manager, messages: list[Message], model_id, request, options
-) -> Outcome:
-    """The agent loop (SMA-42). This route runs in a worker thread: from_thread.run runs
-    the async loop on the app's event loop and waits for it."""
+def ask_with_tools(context: ToolContext, messages: list[Message], turn: Turn, options) -> Outcome:
+    """The agent loop (SMA-42). This runs in a worker thread: from_thread.run runs the
+    async loop on the app's event loop and waits for it. A streamed answer's own thread
+    passes the loop's token (SMA-62); the route's thread pool doesn't need one."""
     run = anyio.from_thread.run(
         functools.partial(
             run_agent_for_user,
             context,
-            manager,
+            turn.manager,
             messages,
-            model_id,
-            request.allow_fallback,
+            turn.model_id,
+            turn.request.allow_fallback,
             options,
             # SMA-43: only the student's OWN message can ask for a write (not notes,
             # documents or tool results: those reach the model, never this check).
-            user_asked_to_act=asks_to_act(request.message),
-        )
+            user_asked_to_act=asks_to_act(turn.request.message),
+            stream=turn.stream,
+            on_tool=turn.on_tool,
+        ),
+        token=turn.token,
     )
     return Outcome(
         run.response,

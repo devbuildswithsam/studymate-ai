@@ -18,7 +18,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.services.llm.base import ChatOptions, ChatResponse, Message
+from app.services.llm.base import ChatOptions, ChatResponse, Message, TextStream
 from app.services.llm.embeddings import EmbeddingProvider
 from app.services.llm.exceptions import LLMError
 from app.services.llm.fallback import Attempt, FallbackManager
@@ -79,6 +79,7 @@ def answer_from_documents(
     model_id: str | None,
     allow_fallback: bool,
     make_embedder: Any,  # Callable[[], EmbeddingProvider]
+    stream: TextStream | None = None,  # SMA-62: stream the answer, then check it
 ) -> StudyAnswer:
     if not document_ids:
         raise StudyError(400, "Add at least one document to this study chat.")
@@ -103,7 +104,11 @@ def answer_from_documents(
     ]
     try:
         result = manager.chat(
-            messages, ChatOptions(max_tokens=1024), model_id, allow_fallback=allow_fallback
+            messages,
+            ChatOptions(max_tokens=1024),
+            model_id,
+            allow_fallback=allow_fallback,
+            stream=stream,  # only the answer streams, not the search rewrite above
         )
     except LLMError as e:
         e.attempts = attempts + getattr(e, "attempts", [])  # log the rewrite call too
@@ -115,8 +120,11 @@ def answer_from_documents(
     # Grounded only if at least one VALID citation is left. That also covers NOT_FOUND
     # (no citations), and a guess with made-up or missing citation numbers.
     found = bool(used)
+    # SMA-62: a STOPPED answer keeps what arrived (its citations still checked), even if
+    # it was cut before its first citation: the student chose to stop, it isn't a guess.
+    shown = text if found or reply.stopped else NOT_FOUND_TEXT
     return StudyAnswer(
-        text=text if found else NOT_FOUND_TEXT,
+        text=shown,
         found=found,
         citations=[_citation(n, hits[n - 1]) for n in used] if found else [],
         response=reply,

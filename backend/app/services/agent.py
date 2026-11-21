@@ -12,7 +12,8 @@ call is NOT run: it becomes a confirmation card, and the model is told it is wai
 import functools
 import json
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import anyio
@@ -21,8 +22,8 @@ from mcp.shared.exceptions import MCPError
 
 from app.mcp_server.context import ToolContext, acting_as
 from app.mcp_server.server import TOOL_KINDS, mcp_server
-from app.services.llm.base import ChatOptions, ChatResponse, Message, ToolCall
-from app.services.llm.exceptions import AllModelsFailedError
+from app.services.llm.base import ChatOptions, ChatResponse, Message, TextStream, ToolCall
+from app.services.llm.exceptions import AllModelsFailedError, AnswerInterruptedError
 from app.services.llm.fallback import Attempt, ChatResult, FallbackManager
 from app.services.tool_policy import decide
 
@@ -83,6 +84,8 @@ async def run_agent(
     options: ChatOptions,
     max_tool_calls: int = MAX_TOOL_CALLS,
     user_asked_to_act: bool = False,  # SMA-43: from the student's own message only
+    stream: TextStream | None = None,  # SMA-62: each turn's text, as it is written
+    on_tool: Callable[[ToolStep], None] | None = None,  # SMA-62: each tool step, as it runs
 ) -> AgentRun:
     mcp_tools = (await session.list_tools()).tools
     schemas = {t.name: t.input_schema for t in mcp_tools}
@@ -95,6 +98,8 @@ async def run_agent(
     first: ChatResult | None = None
 
     while True:
+        if stream is not None:
+            stream.text = ""  # each turn's text is its own; only the last turn's is the answer
         try:
             result = await anyio.to_thread.run_sync(
                 functools.partial(
@@ -104,9 +109,10 @@ async def run_agent(
                     model_id,
                     needs=("tools",),  # never fall back to a model that can't call tools
                     allow_fallback=allow_fallback,
+                    stream=stream,
                 )
             )
-        except AllModelsFailedError as e:
+        except (AllModelsFailedError, AnswerInterruptedError) as e:
             e.attempts = attempts + e.attempts  # so every call of every turn gets logged
             raise
         attempts += result.attempts
@@ -128,8 +134,8 @@ async def run_agent(
             tokens_in,
             tokens_out,
         )
-        if not result.response.tool_calls:
-            return run  # stop condition 1: a final answer
+        if not result.response.tool_calls or result.response.stopped:
+            return run  # stop condition 1: a final answer (or the student pressed Stop)
 
         messages.append(
             {
@@ -154,6 +160,11 @@ async def run_agent(
             step = await run_tool(session, tool_call, schemas, user_asked_to_act)
             steps.append(step)
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": step.result})
+            if on_tool:
+                on_tool(step)  # SMA-62: "Used tool: ..." appears while the answer is written
+        if stream is not None and stream.should_stop():  # Stop pressed while tools ran
+            run.response = replace(result.response, text="", tool_calls=[], stopped=True)
+            return run
 
 
 async def run_tool(
@@ -201,6 +212,8 @@ async def run_agent_for_user(
     allow_fallback: bool,
     options: ChatOptions,
     user_asked_to_act: bool = False,
+    stream: TextStream | None = None,
+    on_tool: Callable[[ToolStep], None] | None = None,
 ) -> AgentRun:
     """Run the loop with the app's own MCP tools, acting for this user (SMA-41 context).
 
@@ -220,6 +233,8 @@ async def run_agent_for_user(
                     allow_fallback,
                     options,
                     user_asked_to_act=user_asked_to_act,
+                    stream=stream,
+                    on_tool=on_tool,
                 )
             except Exception as e:
                 failure = e

@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
-import { type Citation, useSendMessage } from '@/api/chat'
+import { type Citation, StreamError, useSendMessage } from '@/api/chat'
 import { apiPut, ApiError } from '@/api/client'
 import {
   addTurn,
@@ -124,8 +124,15 @@ export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Pr
         },
         onError: (error) => {
           setPendingQuestion(null)
-          setDraft(text)
           toast.error(friendlyError(error))
+          if (error instanceof StreamError && error.messageId) {
+            // SMA-62: cut off halfway, but saved: show the chat as saved.
+            const id = error.conversationId
+            if (!conversationId) navigate(`/study/${id}`, { replace: true, state: { pageKey } })
+            else void queryClient.invalidateQueries({ queryKey: detailKey(id) })
+            return
+          }
+          setDraft(text)
         },
       },
     )
@@ -211,6 +218,7 @@ export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Pr
           <MessageList
             messages={messages}
             isThinking={sendMessage.isPending}
+            live={sendMessage.live}
             onCitation={(messageId, n) => setShown({ messageId, n })}
             onAnswerGenerally={(question) => send(question, { general: true })}
           />
@@ -220,6 +228,8 @@ export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Pr
           onChange={setDraft}
           onSend={() => send(draft)}
           disabled={selected.length === 0 || sendMessage.isPending || conversation.isLoading}
+          answering={sendMessage.isPending}
+          onStop={sendMessage.stop}
           placeholder={
             selected.length ? 'Ask about these documents…' : 'Add a document to start asking'
           }

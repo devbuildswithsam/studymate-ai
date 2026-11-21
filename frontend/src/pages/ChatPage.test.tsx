@@ -176,7 +176,9 @@ describe('Chat page', () => {
     await userEvent.type(input(), 'First{Enter}')
     await userEvent.type(input(), 'Second{Enter}')
 
-    expect(sendButton()).toBeDisabled()
+    // SMA-62: while an answer is written, Send is replaced by Stop.
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
     expect(chatBodies(fetch)).toHaveLength(1)
   })
 

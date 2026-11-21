@@ -8,7 +8,14 @@ import time
 import httpx2
 import openai
 
-from app.services.llm.base import ChatOptions, ChatResponse, LLMProvider, Message, ToolCall
+from app.services.llm.base import (
+    ChatOptions,
+    ChatResponse,
+    LLMProvider,
+    Message,
+    TextStream,
+    ToolCall,
+)
 from app.services.llm.exceptions import (
     LLMConfigError,
     LLMError,
@@ -40,11 +47,17 @@ class OpenAICompatibleProvider(LLMProvider):
             http_client=http_client,
         )
 
-    def chat(self, messages: list[Message], options: ChatOptions | None = None) -> ChatResponse:
-        options = options or ChatOptions()
+    @staticmethod
+    def _extra(options: ChatOptions) -> dict:
+        """Request fields that only some calls need."""
         extra = {"response_format": {"type": "json_object"}} if options.json_mode else {}
         if options.tools:
             extra["tools"] = options.tools  # SMA-42: the model may answer with tool calls
+        return extra
+
+    def chat(self, messages: list[Message], options: ChatOptions | None = None) -> ChatResponse:
+        options = options or ChatOptions()
+        extra = self._extra(options)
 
         start = time.perf_counter()
         try:
@@ -77,6 +90,82 @@ class OpenAICompatibleProvider(LLMProvider):
             provider=self.name,
             latency_ms=latency_ms,
         )
+
+    def chat_stream(
+        self, messages: list[Message], options: ChatOptions | None, stream: TextStream
+    ) -> ChatResponse:
+        """The answer as it is written (SMA-62): stream=True makes the provider send small
+        "chunks" (Server-Sent Events). Text goes to `stream` at once; tool calls arrive in
+        pieces too (name first, then bits of the arguments) and are put back together."""
+        options = options or ChatOptions()
+        start = time.perf_counter()
+        text = ""
+        tool_parts: dict[int, dict] = {}  # tool call index -> its pieces so far
+        usage = None
+        finish_reason = None
+        stopped = False
+        try:
+            chunks = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=options.temperature,
+                max_tokens=options.max_tokens,
+                stream=True,
+                stream_options={"include_usage": True},  # token counts in the last chunk
+                **self._extra(options),
+            )
+            with chunks:  # closes the connection when we stop early: no more tokens billed
+                for chunk in chunks:
+                    if chunk.usage:
+                        usage = chunk.usage
+                    for choice in chunk.choices[:1]:
+                        for call in choice.delta.tool_calls or []:
+                            self._add_tool_piece(tool_parts, call)
+                        if choice.delta.content:
+                            text += choice.delta.content
+                            stream.send(choice.delta.content)
+                        finish_reason = choice.finish_reason or finish_reason
+                    if stream.should_stop():  # the Stop button
+                        stopped = True
+                        break
+        except openai.OpenAIError as e:
+            raise self.translate_error(e) from e
+        except httpx2.HTTPError as e:  # the connection dropped halfway through the answer
+            raise ProviderUnavailableError(
+                f"{self.name}: the connection was lost mid-answer", self.name
+            ) from e
+
+        tool_calls = [
+            ToolCall(p["id"], p["name"], p["arguments"], p["extra"] or None)
+            for _, p in sorted(tool_parts.items())
+        ]
+        if not text and not tool_calls and not stopped:
+            raise LLMError(
+                f"{self.name} returned an empty answer (finish_reason={finish_reason})", self.name
+            )
+        return ChatResponse(
+            text=text,
+            tool_calls=tool_calls,
+            tokens_in=usage.prompt_tokens if usage else 0,
+            tokens_out=usage.completion_tokens if usage else 0,
+            model=self.model,
+            provider=self.name,
+            latency_ms=round((time.perf_counter() - start) * 1000),
+            stopped=stopped,
+        )
+
+    @staticmethod
+    def _add_tool_piece(parts: dict[int, dict], call) -> None:
+        """Add one streamed piece of a tool call to what we have so far."""
+        part = parts.setdefault(call.index, {"id": "", "name": "", "arguments": "", "extra": {}})
+        if call.id:
+            part["id"] = call.id
+        if call.function and call.function.name:
+            part["name"] += call.function.name
+        if call.function and call.function.arguments:
+            part["arguments"] += call.function.arguments
+        raw = call.model_dump(exclude_none=True)  # provider extras (Gemini's signatures)
+        part["extra"].update({k: v for k, v in raw.items() if k not in STANDARD_TOOL_CALL_FIELDS})
 
     @staticmethod
     def _tool_calls(message) -> list[ToolCall]:

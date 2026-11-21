@@ -1,6 +1,7 @@
 // friendlyError: every failure becomes a sentence a student understands. SMA-25 (test-first).
 import { describe, expect, it } from 'vitest'
 
+import { StreamError } from '@/api/chat'
 import { ApiError } from '@/api/client'
 import { friendlyError } from '@/lib/errors'
 
@@ -20,6 +21,14 @@ describe('friendlyError', () => {
       )
     },
   )
+
+  it('an answer cut off halfway (SMA-62) -> its own message, not "busy"', () => {
+    const cutOff = new StreamError('service_unavailable', 'The answer was cut off.', 'm1', 'c1')
+    expect(friendlyError(cutOff)).toBe('The answer was cut off.')
+    // Nothing saved (every model failed before a word): still the usual "busy".
+    const failed = new StreamError('service_unavailable', 'technical', null, 'c1')
+    expect(friendlyError(failed)).toBe(BUSY)
+  })
 
   it('fetch itself failing (no answer at all) -> unreachable', () => {
     expect(friendlyError(new TypeError('Failed to fetch'))).toBe(UNREACHABLE)

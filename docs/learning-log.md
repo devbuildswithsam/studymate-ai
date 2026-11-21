@@ -1012,3 +1012,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-62 — Streaming chat answers (Server-Sent Events) with a Stop button
+**Date:** 21 Nov 2026
+
+**What I did**
+- Answers now appear word by word in every kind of chat: plain, tool (the default Groq model) and study. A **Stop** button replaces Send while an answer is written.
+- Backend: providers can stream (`chat_stream`), tool calls are put back together from pieces, the fallback manager only falls back before the first piece, and the same `POST .../messages` answers as Server-Sent Events when asked. `POST .../stop` ends an answer; what arrived is saved and marked *(Stopped)*; a failure halfway is saved and marked *(cut off)*; a closed tab stops it too.
+- Frontend: reads the stream with `fetch` (not EventSource: it can't POST or send our CSRF header), shows the answer as it grows, shows tool steps as they run.
+- Tests first: 27 backend + 9 frontend streaming tests; 21 mutants all caught; a live run with real Groq through the Vite proxy (first piece after ~1.3 s; Stop, a closed connection and a tool chat all worked).
+
+**What I learned**
+- **Server-Sent Events** are just a long HTTP response of `event:` / `data:` blocks separated by blank lines; the network can split a block anywhere, so the reader keeps the unfinished part.
+- **A stream is still one request:** errors before the first event can be normal 404/400; after it, errors become an `error` event, because the 200 status has already been sent.
+- **Fallback has to stop at the first word:** switching models after that would mix two different answers the student has already started reading.
+- **Stop needs the server to agree:** an explicit stop request lets the server end cleanly, save, and confirm with `done`; just cutting the connection leaves the page unsure what was saved (but a closed tab is handled too).
+- **Streaming providers send tool calls in pieces** (name first, then bits of the arguments) that must be glued back together.
+- **The test client reads whole responses,** so "is it really streamed through the proxy?" and "does a closed tab stop it?" needed a live run.
+- **Keep old behaviour available:** the client still accepts a plain JSON answer, so the old tests (and any proxy that buffers) keep working.
+
+**What confused me**
+- …

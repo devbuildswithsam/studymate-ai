@@ -5,8 +5,17 @@ and can be told to fail, so we can test how the app handles errors.
 """
 
 import hashlib
+import re
+from collections.abc import Callable
 
-from app.services.llm.base import ChatOptions, ChatResponse, LLMProvider, Message, ToolCall
+from app.services.llm.base import (
+    ChatOptions,
+    ChatResponse,
+    LLMProvider,
+    Message,
+    TextStream,
+    ToolCall,
+)
 from app.services.llm.embeddings import EmbeddingProvider
 from app.services.llm.exceptions import ProviderUnavailableError
 from app.services.llm.registry import EmbeddingConfig
@@ -21,12 +30,18 @@ class FakeProvider(LLMProvider):
         replies: list[str | list[ToolCall]] | None = None,
         error: Exception | None = None,
         model_config: dict | None = None,
+        # SMA-62, streaming: fail after this many pieces (a connection lost mid-answer),
+        # and a hook called before each piece with its number (to press Stop in a test).
+        fail_after_pieces: int | None = None,
+        before_piece: Callable[[int], None] | None = None,
     ):
         super().__init__(
             model_config or {"id": "fake-model", "supports_tools": True, "supports_json": True}
         )
         self.replies = list(replies or ["This is a fake answer."])
         self.error = error  # if set, every chat() call raises it
+        self.fail_after_pieces = fail_after_pieces
+        self.before_piece = before_piece
         self.calls: list[list[Message]] = []  # what we were asked, so tests can check it
         self.options: list[ChatOptions] = []  # the options of each call (max_tokens, ...)
 
@@ -49,6 +64,23 @@ class FakeProvider(LLMProvider):
             latency_ms=0,
             tool_calls=tool_calls,
         )
+
+    def chat_stream(
+        self, messages: list[Message], options: ChatOptions | None, stream: TextStream
+    ) -> ChatResponse:
+        """The same reply as chat(), sent word by word (each word with its space)."""
+        response = self.chat(messages, options)
+        for number, piece in enumerate(re.findall(r"\S+\s*", response.text)):
+            if self.before_piece:
+                self.before_piece(number)
+            if stream.should_stop():
+                response.stopped = True
+                break
+            if self.fail_after_pieces is not None and number == self.fail_after_pieces:
+                raise ProviderUnavailableError("fake connection lost mid-answer", self.name)
+            stream.send(piece)
+        response.text = stream.text
+        return response
 
 
 class FakeEmbeddingProvider(EmbeddingProvider):

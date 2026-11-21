@@ -9,9 +9,15 @@ import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { type ActionVerb, type AgentAction, useAgentAction } from '@/api/actions'
-import { useSendMessage } from '@/api/chat'
+import { StreamError, useSendMessage } from '@/api/chat'
 import { ApiError } from '@/api/client'
-import { addTurn, requestTitle, type SavedMessage, useConversation } from '@/api/conversations'
+import {
+  addTurn,
+  detailKey,
+  requestTitle,
+  type SavedMessage,
+  useConversation,
+} from '@/api/conversations'
 import { type ModelInfo, useModels } from '@/api/models'
 import { useCreateNote } from '@/api/notes'
 import { ChatInput } from '@/components/chat/ChatInput'
@@ -101,10 +107,17 @@ export function ChatPage({ conversationId, pageKey }: Props) {
           }
         },
         onError: (error) => {
-          // Remove the waiting bubble and give the text back, ready to retry.
           setPendingQuestion(null)
-          setDraft(text)
           toast.error(friendlyError(error))
+          if (error instanceof StreamError && error.messageId) {
+            // SMA-62: cut off halfway, but the question and the part that arrived were
+            // saved: show the chat as saved (a new chat moves to its own address).
+            const id = error.conversationId
+            if (!conversationId) navigate(`/c/${id}`, { replace: true, state: { pageKey } })
+            else void queryClient.invalidateQueries({ queryKey: detailKey(id) })
+            return
+          }
+          setDraft(text) // nothing was saved: give the text back, ready to retry
         },
       },
     )
@@ -179,6 +192,7 @@ export function ChatPage({ conversationId, pageKey }: Props) {
         <MessageList
           messages={messages}
           isThinking={sendMessage.isPending}
+          live={sendMessage.live}
           onSaveAsNote={saveAsNote}
           onAction={act}
         />
@@ -188,6 +202,8 @@ export function ChatPage({ conversationId, pageKey }: Props) {
         onChange={setDraft}
         onSend={send}
         disabled={sendMessage.isPending || conversation.isLoading}
+        answering={sendMessage.isPending}
+        onStop={sendMessage.stop}
       />
     </div>
   )
