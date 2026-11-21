@@ -183,6 +183,7 @@ Revoke it there when you no longer need it.
 | You see | Do this |
 |---|---|
 | "The local user is missing" | From `backend\` with the venv active: `python -m scripts.seed` |
+| The API won't start: "The database ... is at ..., but the code needs ..." | New code added a table: from `backend\` with the venv active, run `alembic upgrade head` (do this after every `git pull`) |
 | The sidebar says the API is offline | Is window 1 still running? Restart it with the `uvicorn` command |
 | A model shows `no_key` | Its key is missing in `backend\.env`; restart the API after editing it |
 | "The AI is busy" | A free-tier limit was hit: wait a minute and try again |

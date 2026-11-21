@@ -23,6 +23,7 @@ from app.api import (
 )
 from app.config import APP_VERSION, get_settings
 from app.csrf import CSRF_HEADER, CsrfMiddleware
+from app.db.migrations import check_database_is_current
 from app.errors import register_error_handlers
 from app.mcp_server.http import McpEndpoint, run_mcp
 from app.services.llm.registry import get_registry
@@ -36,6 +37,11 @@ mcp_endpoint = McpEndpoint()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Runs while the app runs: here, the MCP server's HTTP handler (SMA-41)."""
+    # SMA-61: refuse to start on a database that is behind the code's migrations, with the
+    # command that fixes it, instead of failing later on some page. The settings come the
+    # same way routes get them, so tests check their own temporary databases.
+    current_settings = app.dependency_overrides.get(get_settings, get_settings)()
+    check_database_is_current(current_settings.database_url)
     async with run_mcp(mcp_endpoint):
         yield
 

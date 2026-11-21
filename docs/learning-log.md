@@ -1007,6 +1007,8 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 - **Bearer tokens are not CSRF targets:** browsers attach cookies automatically, never an Authorization header, which is why /mcp refuses the cookie.
 - **SQLite forgets time zones:** times came back without one, which would have made the browser show them 5.5 hours off. Mutation testing found that nothing checked this.
 - **The isolation guard works:** adding a route with an id made `test_every_route_with_an_id_is_covered` fail until it was in the suite.
+- **Tests can't see my real database:** they build a fresh one with every migration, so they passed while my `app.db` was one migration behind and Settings failed with "no such table". Fix: back up, `alembic upgrade head` (only the new table appeared; every other row count unchanged), and now the API checks the database version at startup and refuses to start with the exact command to run.
+- **Being logged in after a restart is expected:** a JWT session is checked with `JWT_SECRET`, not a server-side list, so restarting doesn't end it; logging out or the 8-hour expiry does.
 
 **What confused me**
 - …
