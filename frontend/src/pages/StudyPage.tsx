@@ -20,6 +20,7 @@ import {
   type SavedMessage,
   useConversation,
 } from '@/api/conversations'
+import { useCreateDeck } from '@/api/decks'
 import { useDocuments } from '@/api/documents'
 import { type ModelInfo, useModels } from '@/api/models'
 import { ChatInput } from '@/components/chat/ChatInput'
@@ -27,7 +28,7 @@ import { MessageList } from '@/components/chat/MessageList'
 import type { ChatMessage } from '@/components/chat/types'
 import { Button } from '@/components/ui/button'
 import { citationLabel } from '@/lib/citations'
-import { friendlyError } from '@/lib/errors'
+import { friendlyError, generationError } from '@/lib/errors'
 
 function toChatMessage(message: SavedMessage, models: ModelInfo[]): ChatMessage {
   const role = message.role === 'user' ? 'user' : 'assistant'
@@ -65,6 +66,7 @@ export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Pr
 
   // A saved chat's documents come from the server; a new chat's from this page.
   const selected = conversation.data?.documents ?? picked
+  const createDeck = useCreateDeck()
   const sendMessage = useSendMessage(setCreatedId, {
     mode: 'study',
     document_ids: selected.map((d) => d.id),
@@ -83,6 +85,19 @@ export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Pr
   const withSources = [...saved].reverse().find((m) => m.citations?.length)
   const sourceMessage = saved.find((m) => m.id === shown?.messageId) ?? withSources
   const sources: Citation[] = sourceMessage?.citations ?? []
+
+  /** SMA-64: a flashcard deck from one answer; the toast offers to open it. */
+  async function makeFlashcards(answer: ChatMessage) {
+    try {
+      const deck = await createDeck.mutateAsync({ message_id: answer.id })
+      toast.success('Flashcards ready', {
+        action: { label: 'Open', onClick: () => navigate(`/flashcards/${deck.id}`) },
+      })
+    } catch (error) {
+      toast.error(generationError(error))
+      throw error // so the button lets you try again
+    }
+  }
 
   async function changeDocuments(next: DocumentRef[]) {
     if (!chatId) {
@@ -220,6 +235,7 @@ export function StudyPage({ conversationId, pageKey, initialDocuments = [] }: Pr
             isThinking={sendMessage.isPending}
             live={sendMessage.live}
             onCitation={(messageId, n) => setShown({ messageId, n })}
+            onMakeFlashcards={makeFlashcards}
             onAnswerGenerally={(question) => send(question, { general: true })}
           />
         </div>

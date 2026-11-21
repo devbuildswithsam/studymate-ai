@@ -10,6 +10,7 @@ const PAGES = [
   ['Documents', '/documents'],
   ['Study', '/study'],
   ['Quizzes', '/quizzes'],
+  ['Flashcards', '/flashcards'], // SMA-64
   ['Tasks', '/tasks'],
   ['Notes', '/notes'],
   ['Progress', '/progress'],

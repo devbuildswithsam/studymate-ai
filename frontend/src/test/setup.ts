@@ -21,6 +21,13 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 })
 
+// jsdom has no pointer capture either. Sonner calls it when a toast is pressed (e.g. a
+// toast's "Open" button, SMA-64): without these, clicking it throws an unhandled error
+// that makes the whole run fail even when every test passes.
+Element.prototype.setPointerCapture ??= () => {}
+Element.prototype.releasePointerCapture ??= () => {}
+Element.prototype.hasPointerCapture ??= () => false
+
 afterEach(() => {
   cleanup() // remove what the test rendered, so tests never see each other's components
   // Sonner keeps toasts in module memory, not in the DOM, so cleanup() can't remove them:

@@ -15,6 +15,8 @@ import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StudyPage } from '@/pages/StudyPage'
+import { DeckPage } from '@/pages/DeckPage'
+import { FlashcardsPage } from '@/pages/FlashcardsPage'
 import { QuizPage } from '@/pages/QuizPage'
 import { QuizzesPage } from '@/pages/QuizzesPage'
 import { TasksPage } from '@/pages/TasksPage'
@@ -62,6 +64,7 @@ const PAGES: Record<string, () => React.JSX.Element> = {
   '/notes': NotesPage,
   '/tasks': TasksPage,
   '/quizzes': QuizzesPage, // SMA-63
+  '/flashcards': FlashcardsPage, // SMA-64
 }
 
 export function AppRoutes() {
@@ -89,6 +92,7 @@ export function AppRoutes() {
           <Route path="/notes/:noteId" element={<NotesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/quizzes/:quizId" element={<QuizPage />} />
+          <Route path="/flashcards/:deckId" element={<DeckPage />} />
         </Route>
       </Route>
     </Routes>

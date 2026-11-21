@@ -3,27 +3,24 @@
 The AI answers with JSON, and the answer is CHECKED (Pydantic) before anyone sees it:
 exactly 4 different options, the right answer's number among them, an explanation, and
 a page we actually showed it. A bad answer gets ONE retry that says exactly what was
-wrong ("repair"); a second bad answer is a clear error, never half a quiz.
+wrong ("repair"); a second bad answer is a clear error, never half a quiz. The loop itself
+is shared with flashcards: structured.py (SMA-64).
 
 Grounded like study answers: the model sees only the document's text, inside <document>
 tags, labelled with its pages ("[page 3]"). A page it never saw is set to unknown rather
 than shown as a source.
 """
 
-import json
-import re
 from dataclasses import dataclass, field
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, StringConstraints, ValidationError, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from app.services.llm.base import ChatOptions, Message
-from app.services.llm.exceptions import LLMError
 from app.services.llm.fallback import Attempt, FallbackManager
-from app.services.summary import document_excerpt
+from app.services.structured import StructuredFailed, ask_for_json, document_block, parse_as
 
 QUESTION_COUNTS = (5, 10)
-PAGE_LABEL = re.compile(r"\[page (\d+)\]")
 
 SYSTEM_PROMPT = (
     "You write a multiple-choice quiz for a student from their study document. The text "
@@ -91,65 +88,42 @@ def generate_quiz(
     count: int,
     model_id: str | None = None,
 ) -> QuizDraft:
-    has_pages = any(page is not None for page, _ in pieces)
-    labelled = [f"[page {page}]\n{text}" if page is not None else text for page, text in pieces]
-    text, partial = document_excerpt(labelled)  # long documents: evenly spaced excerpts
-    shown_pages = {int(n) for n in PAGE_LABEL.findall(text)}
-    note = "These are evenly spaced excerpts of a longer document.\n" if partial else ""
-    rule = PAGE_RULE if has_pages else NO_PAGES_RULE
+    block = document_block(pieces)
+    rule = PAGE_RULE if block.has_pages else NO_PAGES_RULE
     messages: list[Message] = [
         {"role": "system", "content": SYSTEM_PROMPT.format(count=count, page_rule=rule)},
-        {"role": "user", "content": f"{note}<document>\n{text}\n</document>"},
+        {"role": "user", "content": block.text},
     ]
     # Enough room for the questions (and the model's hidden reasoning, on Groq).
     options = ChatOptions(json_mode=True, max_tokens=800 + 400 * count, temperature=0.3)
-    attempts: list[Attempt] = []
-
-    for try_number in (1, 2):
-        try:
-            # needs=("json",): never fall back to a model that can't promise JSON.
-            result = manager.chat(messages, options, model_id, needs=("json",))
-        except LLMError as e:
-            raise QuizFailed(
-                f"The AI couldn't write a quiz right now ({e}). Try again in a minute.",
-                attempts + getattr(e, "attempts", []),
-            ) from e
-        attempts += result.attempts
-        reply = result.response.text
-        try:
-            quiz = _check(reply, count)
-        except ValueError as problem:
-            if try_number == 2:
-                break
-            # The repair: show the model its own reply and exactly what was wrong with it.
-            messages += [
-                {"role": "assistant", "content": reply},
-                {"role": "user", "content": REPAIR.format(problem=problem, count=count)},
-            ]
-            continue
-        questions = [
-            {**q.model_dump(), "page": q.page if q.page in shown_pages else None}
-            for q in quiz.questions[:count]  # more than asked for: keep the first ones
-        ]
-        return QuizDraft(quiz.title or "Quiz", questions, attempts)
-
-    raise QuizFailed(
-        "The AI couldn't write a valid quiz this time (its answer broke the rules twice). "
-        "Try again, or try another document.",
-        attempts,
-    )
+    try:
+        quiz, attempts = ask_for_json(
+            manager,
+            messages,
+            options,
+            check=lambda reply: _check(reply, count),
+            repair_note=lambda problem: REPAIR.format(problem=problem, count=count),
+            model_id=model_id,
+        )
+    except StructuredFailed as e:
+        if e.unavailable:
+            message = f"The AI couldn't write a quiz right now ({e}). Try again in a minute."
+        else:
+            message = (
+                "The AI couldn't write a valid quiz this time (its answer broke the rules "
+                "twice). Try again, or try another document."
+            )
+        raise QuizFailed(message, e.attempts) from e
+    questions = [
+        {**q.model_dump(), "page": q.page if q.page in block.shown_pages else None}
+        for q in quiz.questions[:count]  # more than asked for: keep the first ones
+    ]
+    return QuizDraft(quiz.title or "Quiz", questions, attempts)
 
 
 def _check(reply: str, count: int) -> _Quiz:
     """The checked quiz, or ValueError with a short reason the model can act on."""
-    try:
-        quiz = _Quiz.model_validate(json.loads(reply))
-    except json.JSONDecodeError:
-        raise ValueError("it was not JSON") from None
-    except ValidationError as e:
-        first = e.errors()[0]
-        where = ".".join(str(part) for part in first["loc"])
-        raise ValueError(f"{where}: {first['msg']}") from None
+    quiz = parse_as(_Quiz, reply)
     if len(quiz.questions) < count:
         raise ValueError(f"it had {len(quiz.questions)} questions, not {count}")
     return quiz

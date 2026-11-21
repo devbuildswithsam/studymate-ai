@@ -19,12 +19,13 @@ import {
   useConversation,
 } from '@/api/conversations'
 import { type ModelInfo, useModels } from '@/api/models'
+import { useCreateDeck } from '@/api/decks'
 import { useCreateNote } from '@/api/notes'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
 import { ModelSelector } from '@/components/chat/ModelSelector'
 import type { ChatMessage } from '@/components/chat/types'
-import { friendlyError } from '@/lib/errors'
+import { friendlyError, generationError } from '@/lib/errors'
 import { firstWords } from '@/lib/text'
 
 /** A saved message as the message list shows it, with badges on answers. */
@@ -68,6 +69,7 @@ export function ChatPage({ conversationId, pageKey }: Props) {
   const [allowFallback, setAllowFallback] = useState(true)
   const sendMessage = useSendMessage(setCreatedId)
   const createNote = useCreateNote()
+  const createDeck = useCreateDeck()
   const agentAction = useAgentAction(conversationId ?? createdId)
   const models = useModels()
 
@@ -121,6 +123,19 @@ export function ChatPage({ conversationId, pageKey }: Props) {
         },
       },
     )
+  }
+
+  /** SMA-64: a flashcard deck from one answer; the toast offers to open it. */
+  async function makeFlashcards(answer: ChatMessage) {
+    try {
+      const deck = await createDeck.mutateAsync({ message_id: answer.id })
+      toast.success('Flashcards ready', {
+        action: { label: 'Open', onClick: () => navigate(`/flashcards/${deck.id}`) },
+      })
+    } catch (error) {
+      toast.error(generationError(error))
+      throw error // so the button lets you try again
+    }
   }
 
   /** Save an answer as a note, linked to its message so the note shows where it came from. */
@@ -194,6 +209,7 @@ export function ChatPage({ conversationId, pageKey }: Props) {
           isThinking={sendMessage.isPending}
           live={sendMessage.live}
           onSaveAsNote={saveAsNote}
+          onMakeFlashcards={makeFlashcards}
           onAction={act}
         />
       </div>

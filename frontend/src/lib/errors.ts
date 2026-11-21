@@ -23,3 +23,12 @@ export function friendlyError(error: unknown): string {
   // fetch itself failed: no answer at all (network down, server gone).
   return UNREACHABLE
 }
+
+/**
+ * For things the AI writes (quizzes, flashcards: SMA-63, SMA-64). Their 503 messages are
+ * written for students ("broke the rules twice... try another document") and say more
+ * than the general "AI is busy", so they are shown as they are.
+ */
+export function generationError(error: unknown): string {
+  return error instanceof ApiError && error.status === 503 ? error.message : friendlyError(error)
+}

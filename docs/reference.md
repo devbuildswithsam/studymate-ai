@@ -110,6 +110,17 @@ With the API running (see the README):
   null, one per question]}` is scored on the server and only then returns the right answers,
   explanations and pages (saved for Progress); `DELETE /api/quizzes/{id}` deletes it and its
   attempts. Deleting the document keeps its quizzes (they have their own copy).
+- **Flashcards (SMA-64, `app/services/flashcards.py`, `app/api/decks.py`):**
+  `POST /api/decks` with **either** `{"document_id"}` (a ready document: 10 cards) **or**
+  `{"message_id"}` (one of my **AI answers**: up to 5 cards; a question I typed is 400,
+  someone else's answer 404). Cards are `{"front", "back", "page"}`, checked like quizzes:
+  3 or more, no repeated fronts, a page the model wasn't shown becomes `null`.
+  `GET /api/decks` (with `known` / `reviewed` counts), `GET /api/decks/{id}` (each card with
+  my latest mark: `knew`, `didnt` or `null`), `POST /api/decks/{id}/reviews`
+  `{"card": n, "knew": bool}` (every mark is kept for Progress; the **latest** counts),
+  `DELETE /api/decks/{id}`. A deck keeps its own copy of the cards if its source is deleted.
+- **Shared by quizzes and flashcards:** `app/services/structured.py` asks for JSON (only
+  models that promise it), checks the reply, repairs once, and labels the source's pages.
 - `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)
   is embedded again, continuing where it stopped. One embedding model only, never a fallback:
   `gemini-embedding-2`, 768 float32 numbers per chunk ([ADR-0008](docs/adr/0008-gemini-embedding-2-at-768.md)).

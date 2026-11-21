@@ -3,6 +3,7 @@ import type { ActionVerb, AgentAction } from '@/api/actions'
 import type { LiveAnswer } from '@/api/chat'
 import { ActionCards } from '@/components/chat/ActionCards'
 import { CopyButton } from '@/components/chat/CopyButton'
+import { FlashcardsButton } from '@/components/chat/FlashcardsButton'
 import { Markdown } from '@/components/chat/Markdown'
 import { MessageBadges } from '@/components/chat/MessageBadges'
 import { SaveNoteButton } from '@/components/chat/SaveNoteButton'
@@ -18,6 +19,8 @@ type Props = {
   onSaveAsNote?: (answer: ChatMessage, question: string | undefined) => Promise<unknown>
   // Confirm / Cancel / Undo on the AI's actions (SMA-43).
   onAction?: (action: AgentAction, verb: ActionVerb) => Promise<unknown>
+  // SMA-64: "Make flashcards" from one answer.
+  onMakeFlashcards?: (answer: ChatMessage) => Promise<unknown>
   // SMA-49, study answers: a citation chip was clicked; "Answer from general knowledge".
   onCitation?: (messageId: string, n: number) => void
   onAnswerGenerally?: (question: string) => void
@@ -29,6 +32,7 @@ export function MessageList({
   isThinking = false,
   onSaveAsNote,
   onAction,
+  onMakeFlashcards,
   onCitation,
   onAnswerGenerally,
   live = null,
@@ -75,6 +79,9 @@ export function MessageList({
                     <div className="mt-2 flex items-center justify-between gap-2">
                       {message.meta ? <MessageBadges meta={message.meta} /> : <span />}
                       <div className="flex items-center">
+                        {onMakeFlashcards && (
+                          <FlashcardsButton onMake={() => onMakeFlashcards(message)} />
+                        )}
                         {onSaveAsNote && (
                           <SaveNoteButton
                             onSave={() => onSaveAsNote(message, messages[index - 1]?.content)}

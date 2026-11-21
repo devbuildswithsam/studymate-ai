@@ -26,6 +26,8 @@ create study tasks and notes for you through **MCP tools**.
   you on a **confirmation card**. Text inside documents or notes can never trigger a write.
 - **Quizzes:** multiple-choice questions written from one of your documents (5 or 10), each
   with an explanation and its page; take a quiz, see your score, try again (best scores kept).
+- **Flashcards:** decks written from a document (10 cards) or from any chat answer ("Make
+  flashcards" under it, up to 5); flip each card and mark whether you knew it.
 - **Notes** (search, tags, "Save as note" on any answer) and a **Tasks** board
   (To do / Doing / Done).
 - An **evaluation harness** that scores answers, citations and retrieval on 30 fixed questions

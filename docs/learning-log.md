@@ -1058,3 +1058,26 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-64 — Flashcards from a document or an answer, and reviewing them
+**Date:** 21 Nov 2026
+
+**What I did**
+- First a refactor: the "ask for JSON, check it, repair once" loop and the page labelling moved from quizzes into `app/services/structured.py`, so quizzes and flashcards share one copy. The 27 quiz tests stayed green throughout.
+- The AI writes flashcard decks (front, back, page) from a document (10 cards) or from one AI answer (up to 5, via a new "Make flashcards" button under every answer in Chat and Study).
+- New tables `decks` and `card_reviews` (migration reviewed); every "knew it / didn't" is kept for Progress, and the latest mark counts.
+- A Flashcards page (sidebar), a review screen (front, Show answer, Knew it / Didn't know, a score at the end, Review again).
+- Tests first: 11 service + 1 helper + 14 API + isolation cases (both versions, including "Bob can't make cards from Alice's answer") + 6 frontend; 21 mutants (20 caught, 1 equivalent); a live run with Groq from a PDF and from an answer, both valid first time.
+
+**What I learned**
+- **Refactor with a safety net:** moving shared code is safe when the existing tests run before and after, unchanged.
+- **Two sources, one pipeline:** a document and a chat answer both become (page, text) pieces; only the prompt's wording and the card count differ.
+- **The latest mark wins, but every mark is kept:** the history is what Progress needs; the latest is what "known" means.
+- **"N passed" isn't success:** an unhandled error (jsdom had no `setPointerCapture`, used by the toast) made the run fail with exit code 1 while every test passed. Check the exit code.
+- **Mutation testing found two missing checks:** that only JSON-capable models are asked, and that failed calls are logged.
+- **Ids in the body need isolation tests too:** Bob could have sent Alice's message id in the request body, not the URL.
+
+**What confused me**
+- …

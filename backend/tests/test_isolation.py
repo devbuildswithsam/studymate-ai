@@ -25,7 +25,9 @@ from app.main import app
 from app.models import (
     AccessToken,
     AgentAction,
+    CardReview,
     Conversation,
+    Deck,
     Document,
     LLMCall,
     Message,
@@ -158,10 +160,23 @@ def alices_data(api, two_users, db_session) -> dict[str, str]:
     db_session.add(quiz)
     db_session.flush()
     db_session.add(QuizAttempt(quiz_id=quiz.id, user_id=alice.id, answers=[0], score=1, total=1))
+    # SMA-64: a flashcard deck made from her answer (stored directly, like the quiz) + a review.
+    deck = Deck(
+        user_id=alice.id,
+        title="Alice's cards",
+        source_type="answer",
+        source_name="Alice's physics",
+        message_id=reply["message_id"],
+        cards=[{"front": "F = ?", "back": "m * a", "page": None}],
+    )
+    db_session.add(deck)
+    db_session.flush()
+    db_session.add(CardReview(deck_id=deck.id, user_id=alice.id, card_index=0, knew=True))
     db_session.commit()
     return {
         "token": token_id,
         "quiz": quiz.id,
+        "deck": deck.id,
         "conversation": conversation_id,
         "message": reply["message_id"],
         "note": note_id,
@@ -189,6 +204,8 @@ def fingerprint(db_session) -> dict:
         "tokens": db_session.execute(select(AccessToken.id, AccessToken.name)).all(),
         "quizzes": db_session.execute(select(Quiz.id, Quiz.title)).all(),
         "quiz_attempts": db_session.execute(select(QuizAttempt.id, QuizAttempt.score)).all(),
+        "decks": db_session.execute(select(Deck.id, Deck.title)).all(),
+        "card_reviews": db_session.execute(select(CardReview.id, CardReview.knew)).all(),
     }
 
 
@@ -219,6 +236,9 @@ ISOLATION_CASES = [
     ("GET", "/api/quizzes/{quiz_id}", None),  # SMA-63
     ("POST", "/api/quizzes/{quiz_id}/attempts", {"answers": [0]}),
     ("DELETE", "/api/quizzes/{quiz_id}", None),
+    ("GET", "/api/decks/{deck_id}", None),  # SMA-64
+    ("POST", "/api/decks/{deck_id}/reviews", {"card": 0, "knew": False}),
+    ("DELETE", "/api/decks/{deck_id}", None),
 ]
 
 
@@ -231,6 +251,7 @@ def fill(path: str, ids: dict[str, str]) -> str:
         document_id=ids["document"],
         token_id=ids["token"],
         quiz_id=ids["quiz"],
+        deck_id=ids["deck"],
     )
 
 
@@ -266,6 +287,7 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
         "document": UNKNOWN_ID,
         "token": UNKNOWN_ID,
         "quiz": UNKNOWN_ID,
+        "deck": UNKNOWN_ID,
     }
 
     alices = client.request(method, fill(path, alices_data), json=body)
@@ -305,6 +327,7 @@ def test_b_s_lists_and_search_do_not_show_a_s_items(api, two_users, alices_data)
     assert client.get("/api/tasks", params={"status": "todo"}).json() == []
     assert client.get("/api/documents").json() == []
     assert client.get("/api/quizzes").json() == []  # SMA-63
+    assert client.get("/api/decks").json() == []  # SMA-64
 
 
 def test_b_cannot_save_a_note_from_a_s_message(api, two_users, alices_data, db_session):
@@ -315,6 +338,17 @@ def test_b_cannot_save_a_note_from_a_s_message(api, two_users, alices_data, db_s
         "/api/notes",
         json={"title": "stolen", "content": "", "source_message_id": alices_data["message"]},
     )
+
+    assert response.status_code == 404
+    assert fingerprint(db_session) == before
+
+
+def test_b_cannot_make_flashcards_from_a_s_answer(api, two_users, alices_data, db_session):
+    # The answer's id travels in the body, not the path: checked separately (SMA-64).
+    _, bob = two_users
+    before = fingerprint(db_session)
+
+    response = api(bob).post("/api/decks", json={"message_id": alices_data["message"]})
 
     assert response.status_code == 404
     assert fingerprint(db_session) == before

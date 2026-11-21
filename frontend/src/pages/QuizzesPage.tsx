@@ -2,19 +2,12 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
-import { ApiError } from '@/api/client'
 import { useDocuments } from '@/api/documents'
 import { useCreateQuiz, useDeleteQuiz, useQuizzes } from '@/api/quizzes'
 import { Button } from '@/components/ui/button'
-import { friendlyError } from '@/lib/errors'
+import { friendlyError, generationError } from '@/lib/errors'
 
 const COUNTS = [5, 10]
-
-/** The backend explains a failed quiz in words meant for students ("broke the rules
- * twice... try another document"); the general helper would just say "AI busy". */
-function quizError(error: unknown): string {
-  return error instanceof ApiError && error.status === 503 ? error.message : friendlyError(error)
-}
 
 export function QuizzesPage() {
   return (
@@ -96,7 +89,7 @@ function NewQuiz() {
       </Button>
       {create.isError && (
         <p role="alert" className="w-full text-sm text-red-600">
-          {quizError(create.error)}
+          {generationError(create.error)}
         </p>
       )}
     </form>

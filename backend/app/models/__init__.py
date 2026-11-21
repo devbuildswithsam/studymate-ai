@@ -7,6 +7,7 @@ env.py needs to compare models with the database.
 from app.models.access_token import AccessToken
 from app.models.agent_action import AgentAction
 from app.models.conversation import Conversation, Message
+from app.models.deck import CardReview, Deck
 from app.models.document import Chunk, Document, conversation_documents
 from app.models.llm_call import LLMCall
 from app.models.note import Note
@@ -17,8 +18,10 @@ from app.models.user import User
 __all__ = [
     "AccessToken",
     "AgentAction",
+    "CardReview",
     "Chunk",
     "Conversation",
+    "Deck",
     "Document",
     "LLMCall",
     "Message",
