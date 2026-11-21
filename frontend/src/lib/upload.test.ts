@@ -159,10 +159,11 @@ describe('checkFile (in the browser, before any upload)', () => {
   const file = (name: string, bytes: number) => new File([new Uint8Array(bytes)], name)
   const MB = 1024 * 1024
 
-  it('accepts PDF, TXT and MD files up to 4 MB', () => {
+  it('accepts PDF, DOCX, TXT and MD files up to 4 MB', () => {
     expect(checkFile(file('Physics.pdf', 4 * MB))).toBeNull()
     expect(checkFile(file('notes.TXT', 10))).toBeNull()
     expect(checkFile(file('dbms.md', 10))).toBeNull()
+    expect(checkFile(file('Lecture.docx', 10))).toBeNull() // SMA-66
   })
 
   it('refuses a file over 4 MB', () => {
@@ -170,7 +171,7 @@ describe('checkFile (in the browser, before any upload)', () => {
   })
 
   it('refuses other types and empty files', () => {
-    expect(checkFile(file('slides.pptx', 10))).toBe('slides.pptx: only PDF, TXT or MD files.')
+    expect(checkFile(file('slides.pptx', 10))).toBe('slides.pptx: only PDF, DOCX, TXT or MD files.')
     expect(checkFile(file('empty.txt', 0))).toBe('empty.txt is empty.')
   })
 })

@@ -114,7 +114,7 @@ export function DocumentsPage() {
         )}
       >
         <UploadIcon aria-hidden className="size-8 text-muted-foreground" />
-        <p>Drag &amp; drop PDF, TXT or MD files here (max 4 MB each)</p>
+        <p>Drag &amp; drop PDF, DOCX, TXT or MD files here (max 4 MB each)</p>
         <Button variant="outline" onClick={() => input.current?.click()}>
           Browse files
         </Button>

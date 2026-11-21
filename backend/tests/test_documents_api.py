@@ -1,4 +1,4 @@
-"""Uploading documents: only real PDF / TXT / MD files up to 4 MB (guide 7.3, 9). SMA-44.
+"""Uploading documents: only real PDF / DOCX / TXT / MD files up to 4 MB (guide 7.3, 9). SMA-44.
 
 The type is decided by the file's CONTENT. The name and the browser's Content-Type header
 are both chosen by whoever sends the file, so neither can be trusted.
@@ -88,15 +88,15 @@ def test_a_file_over_4_mb_gets_413(client):
 @pytest.mark.parametrize(
     "name, data, why",
     [
-        ("slides.pptx", b"PK\x03\x04 a zip file", "PDF, TXT or MD"),  # not an allowed type
-        ("page.html", b"<html><script>alert(1)</script></html>", "PDF, TXT or MD"),
+        ("slides.pptx", b"PK\x03\x04 a zip file", "PDF, DOCX, TXT or MD"),  # not an allowed type
+        ("page.html", b"<html><script>alert(1)</script></html>", "PDF, DOCX, TXT or MD"),
         ("fake.pdf", b"just some text, not a PDF", "not a real PDF"),  # renamed text
         ("virus.pdf", b"MZ\x90\x00 a Windows program", "not a real PDF"),  # renamed program
         ("binary.txt", b"\x00\x01\x02\xff\xfe binary data", "not plain text"),
         ("nul.txt", b"valid UTF-8\x00\x00but with NUL bytes", "not plain text"),
         ("latin1.md", "café".encode("latin-1"), "not plain text"),  # not UTF-8
         ("hidden.txt", PDF, "is a PDF"),  # a PDF renamed .txt: wrong extension
-        ("noextension", b"some text", "PDF, TXT or MD"),
+        ("noextension", b"some text", "PDF, DOCX, TXT or MD"),
     ],
 )
 def test_a_wrong_or_disguised_type_gets_415(client, name, data, why):

@@ -4,17 +4,25 @@ The file's name and the browser's Content-Type header are chosen by whoever send
 so the TYPE is decided by the bytes:
 - a PDF must start with the PDF "magic bytes" %PDF-
 - TXT / MD must be UTF-8 text with no NUL bytes (binary files nearly always have some)
+- a DOCX must be a ZIP file holding the Word parts (SMA-66), and not unpack to more than
+  MAX_UNZIPPED_BYTES: a "zip bomb" is a tiny file that unpacks to gigabytes
 The name's extension must agree with the content: a PDF renamed .txt is refused too.
 """
 
+import io
 import re
+import zipfile
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+
+from app.models.document import DOCX_TYPE
 
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024  # 4 MB (guide: Vercel's 4.5 MB body limit, minus overhead)
 MAX_FILENAME_CHARS = 255
 PDF_MAGIC = b"%PDF-"
 TEXT_TYPES = {".txt": "text/plain", ".md": "text/markdown"}
+DOCX_PARTS = ("[Content_Types].xml", "word/document.xml")  # what makes a ZIP a Word file
+MAX_UNZIPPED_BYTES = 40 * 1024 * 1024  # 40 MB: a real 4 MB DOCX unpacks to far less
 
 
 class UploadRejected(Exception):
@@ -49,13 +57,32 @@ def content_type(name: str, data: bytes) -> str:
         if not is_pdf:
             raise UploadRejected(415, f"{name} is not a real PDF (its content doesn't match).")
         return "application/pdf"
+    if extension == ".docx":
+        check_docx(name, data)
+        return DOCX_TYPE
     if extension in TEXT_TYPES:
         if is_pdf:
             raise UploadRejected(415, f"{name} is a PDF: rename it to .pdf.")
         if not is_utf8_text(data):
             raise UploadRejected(415, f"{name} is not plain text (UTF-8).")
         return TEXT_TYPES[extension]
-    raise UploadRejected(415, "Only PDF, TXT or MD files can be uploaded.")
+    raise UploadRejected(415, "Only PDF, DOCX, TXT or MD files can be uploaded.")
+
+
+def check_docx(name: str, data: bytes) -> None:
+    """Reads only the ZIP's table of contents: nothing is unpacked here."""
+    not_docx = UploadRejected(415, f"{name} is not a real DOCX (its content doesn't match).")
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            files = archive.infolist()
+    except zipfile.BadZipFile:
+        raise not_docx from None
+    if not set(DOCX_PARTS) <= {f.filename for f in files}:
+        raise not_docx  # a ZIP, but not a Word document (e.g. PowerPoint, or any .zip)
+    # The sizes in the table of contents are what the parts claim; zipfile also stops
+    # reading a part that unpacks to more than it claimed, so the claim can be trusted.
+    if sum(f.file_size for f in files) > MAX_UNZIPPED_BYTES:
+        raise UploadRejected(413, f"{name} is too large when unpacked. Try a smaller file.")
 
 
 def is_utf8_text(data: bytes) -> bool:

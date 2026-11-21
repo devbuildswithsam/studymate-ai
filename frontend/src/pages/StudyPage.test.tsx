@@ -131,8 +131,8 @@ describe('Study page', () => {
 
     expect(await screen.findByText('From your documents · 1 source')).toBeInTheDocument()
     expect(posted(fetch, '/api/conversations')).toEqual([{ mode: 'study', document_ids: ['d1'] }])
-    await userEvent.click(screen.getByRole('button', { name: '[1] Physics.pdf p.12' }))
-    const source = within(sources()).getByRole('listitem', { name: '[1] Physics.pdf p.12' })
+    await userEvent.click(screen.getByRole('button', { name: '[1] Physics.pdf p. 12' }))
+    const source = within(sources()).getByRole('listitem', { name: '[1] Physics.pdf p. 12' })
     expect(source).toHaveTextContent('force equals mass times acceleration')
     expect(source).toHaveAttribute('aria-current', 'true') // the clicked one is highlighted
   })

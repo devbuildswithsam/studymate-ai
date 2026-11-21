@@ -16,7 +16,7 @@ create study tasks and notes for you through **MCP tools**.
   automatic fallback). Answers appear word by word as they're written, with a **Stop**
   button. Markdown and maths, a model selector, and badges showing which model answered.
   Chats are saved and get short AI titles.
-- **Documents:** upload PDF, TXT or Markdown files (up to 4 MB) and watch them being read,
+- **Documents:** upload PDF, Word (DOCX), TXT or Markdown files (up to 4 MB) and watch them being read,
   split into chunks and embedded. Each one gets an AI **summary and key points**.
 - **Study:** pick documents and ask questions. Answers come only from those documents, with
   citations like `[1] Physics.pdf p.12` and a Sources panel; if the answer isn't there, it
@@ -264,7 +264,7 @@ npm run build
 ## Tech stack
 
 React 19 + TypeScript, Vite, TanStack Query, Tailwind/shadcn · FastAPI, SQLAlchemy 2, Alembic,
-SQLite · MCP Python SDK · pypdf, NumPy · Groq and Gemini through their OpenAI-compatible APIs
+SQLite · MCP Python SDK · pypdf, python-docx, NumPy · Groq and Gemini through their OpenAI-compatible APIs
 
 ## Documentation
 

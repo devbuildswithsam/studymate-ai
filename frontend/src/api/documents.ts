@@ -7,7 +7,11 @@ import { ApiError, apiDelete, apiGet, apiPost } from '@/api/client'
 export type DocumentInfo = {
   id: string
   filename: string
-  mime_type: 'application/pdf' | 'text/plain' | 'text/markdown'
+  mime_type:
+    | 'application/pdf'
+    | 'text/plain'
+    | 'text/markdown'
+    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // SMA-66
   size_bytes: number
   page_count: number | null // PDFs only
   status: 'processing' | 'ready' | 'failed'

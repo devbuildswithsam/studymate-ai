@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router'
 
 import { useDeck, useReviewCard } from '@/api/decks'
 import { Button } from '@/components/ui/button'
+import { location } from '@/lib/citations'
 import { friendlyError } from '@/lib/errors'
 
 export function DeckPage() {
@@ -76,7 +77,9 @@ export function DeckPage() {
               <div className="mt-4 border-t pt-4">
                 <p>{card.back}</p>
                 {card.page !== null && (
-                  <p className="mt-2 text-xs text-muted-foreground">(p. {card.page})</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    ({location(deck.data.source_name, card.page)})
+                  </p>
                 )}
               </div>
             )}

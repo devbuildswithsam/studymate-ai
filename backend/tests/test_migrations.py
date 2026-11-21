@@ -182,3 +182,59 @@ def test_existing_tasks_survive_getting_a_document_foreign_key(tmp_path):
     assert sql(url, "PRAGMA foreign_key_check") == []
     command.downgrade(config, "-1")
     assert sql(url, "SELECT id FROM tasks ORDER BY id") == [("t1",), ("t2",)]
+
+
+DOCX_REVISION = "15dc82b50fad"  # SMA-66: documents may be DOCX
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def a_document_with_a_chunk(url: str, doc_id: str, mime_type: str) -> None:
+    sql(
+        url,
+        "INSERT INTO documents (id, user_id, filename, mime_type, size_bytes, status, created_at) "
+        "VALUES (:id, 'u1', 'f', :mime, 1, 'ready', '2026-11-01')",
+        id=doc_id,
+        mime=mime_type,
+    )
+    sql(
+        url,
+        "INSERT INTO chunks (id, document_id, chunk_index, page, text, token_count) "
+        "VALUES (:id, :doc, 0, 1, 'text', 1)",
+        id=f"chunk-{doc_id}",
+        doc=doc_id,
+    )
+
+
+def test_accepting_docx_keeps_every_document_and_its_chunks(tmp_path):
+    url = f"sqlite:///{(tmp_path / 'docx.db').as_posix()}"
+    config = alembic_config(url)
+    command.upgrade(config, f"{DOCX_REVISION}-1")
+    seed_real_looking_data(url)
+    a_document_with_a_chunk(url, "d1", "application/pdf")
+
+    command.upgrade(config, DOCX_REVISION)  # rebuilds the documents table
+
+    assert sql(url, "SELECT id FROM chunks") == [("chunk-d1",)]  # no cascade during the rebuild
+    # Long enough for the 71-character DOCX type (SQLite ignores lengths; Postgres wouldn't).
+    column = "SELECT type FROM pragma_table_info('documents') WHERE name = 'mime_type'"
+    assert sql(url, column) == [("VARCHAR(100)",)]
+    a_document_with_a_chunk(url, "d2", DOCX)  # the new rule accepts DOCX
+    with pytest.raises(Exception, match="CHECK constraint"):
+        a_document_with_a_chunk(url, "d3", "image/png")  # and still nothing else
+
+
+def test_downgrading_refuses_while_docx_documents_exist(tmp_path):
+    url = f"sqlite:///{(tmp_path / 'docx.db').as_posix()}"
+    config = alembic_config(url)
+    command.upgrade(config, DOCX_REVISION)
+    seed_real_looking_data(url)
+    a_document_with_a_chunk(url, "d1", "application/pdf")
+    a_document_with_a_chunk(url, "d2", DOCX)
+
+    with pytest.raises(RuntimeError, match="Delete them in the app first"):
+        command.downgrade(config, "-1")
+
+    assert sql(url, "SELECT id FROM documents ORDER BY id") == [("d1",), ("d2",)]  # untouched
+    sql(url, "DELETE FROM documents WHERE id = 'd2'")
+    command.downgrade(config, "-1")  # without DOCX documents it works
+    assert sql(url, "SELECT id FROM chunks") == [("chunk-d1",)]

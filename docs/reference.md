@@ -73,10 +73,17 @@ With the API running (see the README):
 - `PATCH / DELETE /api/tasks/{id}` — edit or move between columns (send only what changes;
   `null` clears the due date or description) / delete. Moving to `done` records `completed_at`.
   `created_by` is always `user` here: only the AI's MCP tools (SMA-41) create `ai` tasks.
-- `POST /api/documents` — upload one file (multipart form, field `file`): **PDF, TXT or MD,
-  at most 4 MB**. The type is decided by the file's **content** (a PDF must start with
-  `%PDF-`; TXT/MD must be UTF-8 text), never by its name or the browser's Content-Type.
-  Too big → **413**, wrong or disguised type → **415**, empty → 422. Only the file's own
+- `POST /api/documents` — upload one file (multipart form, field `file`): **PDF, DOCX, TXT or
+  MD, at most 4 MB**. The type is decided by the file's **content** (a PDF must start with
+  `%PDF-`; a DOCX must be a ZIP holding `[Content_Types].xml` and `word/document.xml`;
+  TXT/MD must be UTF-8 text), never by its name or the browser's Content-Type.
+  Too big → **413** (also a DOCX that would unpack to more than 40 MB: a "zip bomb"),
+  wrong or disguised type → **415**, empty → 422. **DOCX (SMA-66)** has no pages: it is cut
+  into **sections** at its Word headings (Heading 1, 2, … and Title), numbered from 1, and
+  that number is stored where a PDF's page number goes; citations, quiz answers and
+  flashcards then say "section 2" (the frontend's `location()` decides by the `.docx` name,
+  which the check guarantees). A DOCX without headings has no numbers, like TXT. Tables are
+  kept as "cell | cell" lines. Only the file's own
   name is kept (no folders). The file itself is never stored, only its text chunks and vectors.
   After the checks, the same request **ingests** the file (extract → clean → chunk → embed) and
   answers with a **stream of progress events**, one JSON object per line (NDJSON, SMA-47):
@@ -295,7 +302,8 @@ backend/
     services/agent.py  the chat's agent loop: MCP tool calls, at most 5 per message (SMA-42)
     services/tool_policy.py, services/actions.py
                        write-action policy: run / hold, cards, confirm, undo (SMA-43)
-    services/rag/      documents (SMA-45): extract.py (pypdf, page by page; scans rejected),
+    services/rag/      documents (SMA-45): extract.py (pypdf, page by page; scans rejected;
+                       python-docx, section by section, SMA-66),
                        clean.py (hyphens, padding, headers/footers), chunk.py (~800
                        tokens, 15% overlap, paragraph boundaries, page numbers), embed.py
                        (vectors in batches, resumable, one model per document; SMA-46),

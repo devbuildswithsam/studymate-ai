@@ -113,7 +113,7 @@ describe('Documents page', () => {
     renderApp('/documents')
 
     expect(await screen.findByText(/No documents yet/)).toBeInTheDocument()
-    expect(screen.getByText(/PDF, TXT or MD/)).toHaveTextContent('max 4 MB')
+    expect(screen.getByText(/PDF, DOCX, TXT or MD/)).toHaveTextContent('max 4 MB')
   })
 
   it('Done when: an upload shows real progress through to Ready', async () => {
@@ -205,7 +205,7 @@ describe('Documents page', () => {
 
     await chooseFiles(pdf('slides.pptx'))
 
-    expect(uploads()).toHaveTextContent('only PDF, TXT or MD files')
+    expect(uploads()).toHaveTextContent('only PDF, DOCX, TXT or MD files')
     expect(uploadDocument).not.toHaveBeenCalled()
   })
 

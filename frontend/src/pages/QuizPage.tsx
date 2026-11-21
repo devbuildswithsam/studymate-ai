@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router'
 
 import { type AttemptResult, type QuizQuestion, useQuiz, useSubmitAttempt } from '@/api/quizzes'
 import { Button } from '@/components/ui/button'
+import { location } from '@/lib/citations'
 import { friendlyError } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
@@ -78,6 +79,7 @@ export function QuizPage() {
               chosen={answers[index] ?? null}
               onChoose={(option) => choose(index, option)}
               result={result?.results[index]}
+              documentName={quiz.data.document_name}
             />
           </li>
         ))}
@@ -107,9 +109,10 @@ type CardProps = {
   chosen: number | null
   onChoose: (option: number) => void
   result?: AttemptResult['results'][number]
+  documentName: string // a page in a PDF, a section in a DOCX (SMA-66)
 }
 
-function QuestionCard({ number, question, chosen, onChoose, result }: CardProps) {
+function QuestionCard({ number, question, chosen, onChoose, result, documentName }: CardProps) {
   return (
     // fieldset + legend: the options are one group, named by the question.
     <fieldset className="rounded-md border p-4">
@@ -146,7 +149,7 @@ function QuestionCard({ number, question, chosen, onChoose, result }: CardProps)
           </p>
           <p className="mt-1 text-muted-foreground">
             {result.explanation}
-            {result.page !== null && ` (p. ${result.page})`}
+            {result.page !== null && ` (${location(documentName, result.page)})`}
           </p>
         </div>
       )}

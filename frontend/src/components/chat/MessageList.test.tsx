@@ -325,7 +325,7 @@ describe('MessageList study answers (SMA-49)', () => {
 
     expect(screen.getByText('From your documents · 2 sources')).toBeInTheDocument()
     expect(screen.queryByText('General AI')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: '[1] Physics.pdf p.12' }))
+    await userEvent.click(screen.getByRole('button', { name: '[1] Physics.pdf p. 12' }))
     expect(onCitation).toHaveBeenCalledWith('a1', 1)
     expect(screen.getByRole('button', { name: '[2] Physics.pdf' })).toBeInTheDocument() // no page
   })

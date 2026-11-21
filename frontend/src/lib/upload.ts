@@ -9,7 +9,7 @@ import { ApiError, csrfHeader } from '@/api/client'
 import type { DocumentInfo } from '@/api/documents'
 
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 // same limit as the backend (4 MB)
-const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md']
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md'] // SMA-66: DOCX
 export const ACCEPT = ALLOWED_EXTENSIONS.join(',')
 
 /** One step of the ingestion, exactly as the backend streams it. */
@@ -30,7 +30,7 @@ export type UploadProgress = { stage: 'uploading'; percent: number } | IngestEve
 export function checkFile(file: File): string | null {
   const name = file.name.toLowerCase()
   if (!ALLOWED_EXTENSIONS.some((extension) => name.endsWith(extension))) {
-    return `${file.name}: only PDF, TXT or MD files.`
+    return `${file.name}: only PDF, DOCX, TXT or MD files.`
   }
   if (file.size > MAX_UPLOAD_BYTES) return `${file.name} is larger than 4 MB.`
   if (file.size === 0) return `${file.name} is empty.`

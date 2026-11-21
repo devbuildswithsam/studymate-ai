@@ -23,6 +23,7 @@ from app.services.llm.embeddings import EmbeddingProvider
 from app.services.llm.exceptions import LLMError
 from app.services.llm.fallback import Attempt, FallbackManager
 from app.services.rag.embed import failure_message
+from app.services.rag.extract import location_word
 from app.services.rag.retrieve import Hit, retrieve
 
 TOP_K = 5
@@ -140,7 +141,7 @@ def sources_block(hits: list[Hit]) -> str:
     """The numbered sources, each in its own <source> tags (guide 9.3)."""
     parts = []
     for n, h in enumerate(hits, start=1):
-        page = f' page="{h.page}"' if h.page is not None else ""
+        page = f' {location_word(h.filename)}="{h.page}"' if h.page is not None else ""
         # A document could contain "</source>" to break out of its tag and pose as our
         # instructions: neutralise any source tag inside the text.
         text = re.sub(r"<(/?\s*source)", r"&lt;\1", h.text, flags=re.IGNORECASE)

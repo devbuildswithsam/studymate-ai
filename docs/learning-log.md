@@ -1099,3 +1099,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-66 — DOCX upload
+**Date:** 21 Nov 2026
+
+**What I did**
+- Word files (.docx) can be uploaded: checked by content (a ZIP holding the Word parts), read with python-docx, then the same clean → chunk → embed → summary pipeline.
+- Word has no pages, so a DOCX is cut into sections at its headings; the section number is stored where a PDF's page goes, and citations, quiz answers and flashcards say "section 2".
+- A migration lets the `documents` table accept the DOCX type (CHECK constraint, and a longer column); its downgrade refuses while DOCX documents exist instead of deleting them.
+- Tests first: 18 DOCX tests (made with a `docx_maker.py` helper, no binary files in the repo), 2 migration tests, 4 frontend tests; a mutation check; a live run through the real API (Gemini embeddings, Groq summary and answer citing "section 1" and "section 6").
+
+**What I learned**
+- **A DOCX is a ZIP of XML files:** "is it really Word?" means "is it a ZIP, and does it hold `word/document.xml`?"
+- **Zip bombs:** a few KB can unpack to gigabytes; the ZIP's table of contents says how big each file is, so we can refuse before unpacking anything.
+- **"Page" is a printer idea:** Word reflows text, so the only stable locations are the author's own headings.
+- **Table rebuilds and cascades:** on SQLite, changing a CHECK constraint rebuilds the table; with foreign keys on, dropping the old table would cascade-delete every chunk. Our migrations switch them off, and a test proves the chunks survive.
+- **A downgrade must not destroy data:** when the old schema can't hold some rows, refuse with a clear message.
+
+**What confused me**
+- …

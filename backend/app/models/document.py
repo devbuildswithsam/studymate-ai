@@ -25,7 +25,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 from app.models.common import allowed, new_id, utcnow
 
-DOCUMENT_TYPES = ("application/pdf", "text/plain", "text/markdown")  # what upload accepts
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+DOCUMENT_TYPES = ("application/pdf", "text/plain", "text/markdown", DOCX_TYPE)  # SMA-66: DOCX
 DOCUMENT_STATUSES = ("processing", "ready", "failed")
 FLOAT32_BYTES = 4  # one number of an embedding
 
@@ -60,7 +61,7 @@ class Document(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     filename: Mapped[str] = mapped_column(String(255))  # shown in the UI, never used as a path
-    mime_type: Mapped[str] = mapped_column(String(50))  # decided by the content, not the name
+    mime_type: Mapped[str] = mapped_column(String(100))  # decided by the content, not the name
     size_bytes: Mapped[int] = mapped_column(Integer)
     page_count: Mapped[int | None] = mapped_column(Integer)  # PDFs only, known after extraction
     status: Mapped[str] = mapped_column(
@@ -94,7 +95,7 @@ class Chunk(Base):
     # search joins documents and filters on documents.user_id (SMA-48).
     document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
     chunk_index: Mapped[int] = mapped_column(Integer)  # 0, 1, 2... in reading order
-    page: Mapped[int | None] = mapped_column(Integer)  # for citations; TXT/MD have no pages
+    page: Mapped[int | None] = mapped_column(Integer)  # for citations; DOCX: the section (SMA-66)
     text: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer)
     # NULL until embedded (chunks are saved first, then embedded in batches).
