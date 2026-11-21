@@ -14,6 +14,12 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_utc(moment: datetime) -> datetime:
+    """SQLite has no time-zone type: datetimes come back without one (but hold UTC). Mark
+    them as UTC so they can be compared with utcnow() and sent to the browser as UTC."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
 def allowed(column: str, values: tuple[str, ...]) -> str:
     """SQL for a CHECK constraint: the column must be one of `values` (NULL is allowed)."""
     return f"{column} IN ({', '.join(repr(v) for v in values)})"

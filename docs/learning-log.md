@@ -989,3 +989,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-61 — MCP personal access tokens: Settings page and Bearer auth on /mcp
+**Date:** 21 Nov 2026
+
+**What I did**
+- Added personal access tokens: a new `access_tokens` table (migration reviewed), an API to list, create and revoke them, and a **Settings** page (gear icon next to my name) that shows a new token once with a Copy button.
+- In accounts mode `/mcp` now accepts `Authorization: Bearer <token>` and acts as the token's owner. No token, the wrong scheme, an unknown, expired or revoked token, or a session cookie → 401 with `WWW-Authenticate: Bearer`. Local mode is unchanged.
+- Tests first: 24 backend tests (+ the token route in the two-way isolation suite) and 6 frontend tests; 14 mutants all caught after adding 2 tests for gaps the first run found.
+
+**What I learned**
+- **A token is a password a program uses,** so it gets the same care: shown once, stored only as a hash, with an expiry, and revocable.
+- **Fast hash for random tokens, slow hash for passwords:** 32 random bytes can't be guessed, so SHA-256 is enough and keeps every /mcp request fast. People pick guessable passwords, so those need Argon2.
+- **A prefix (`smat_`) makes tokens recognisable** in the list, and lets secret scanners spot one pasted in public.
+- **Bearer tokens are not CSRF targets:** browsers attach cookies automatically, never an Authorization header, which is why /mcp refuses the cookie.
+- **SQLite forgets time zones:** times came back without one, which would have made the browser show them 5.5 hours off. Mutation testing found that nothing checked this.
+- **The isolation guard works:** adding a route with an id made `test_every_route_with_an_id_is_covered` fail until it was in the suite.
+
+**What confused me**
+- …

@@ -1,6 +1,7 @@
-// Who is signed in, and Logout (SMA-59). In local mode there is only the local user and
-// nothing to log out of, so the button is hidden.
-import { LogOutIcon } from 'lucide-react'
+// Who is signed in, Settings (SMA-61) and Logout (SMA-59). In local mode there is only the
+// local user and nothing to log out of, so Logout is hidden.
+import { LogOutIcon, SettingsIcon } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { useLogout, useMe } from '@/api/auth'
 import { useHealth } from '@/api/health'
@@ -18,6 +19,12 @@ export function UserMenu() {
         {user.name && <p className="truncate font-medium">{user.name}</p>}
         <p className="truncate text-xs text-muted-foreground">{user.email}</p>
       </div>
+      {/* SMA-61: access tokens for MCP clients */}
+      <Button asChild variant="ghost" size="icon" title="Settings">
+        <Link to="/settings" aria-label="Settings">
+          <SettingsIcon aria-hidden />
+        </Link>
+      </Button>
       {health?.auth_mode === 'jwt' && (
         <Button
           variant="ghost"

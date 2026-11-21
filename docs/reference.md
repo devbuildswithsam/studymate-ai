@@ -105,16 +105,29 @@ StudyMate's tools for AI clients (guide 7.2), over Streamable HTTP (stateless, p
 `search_documents` (SMA-48: `query`, optional `document_ids`, `top_k` up to 8; read-only).
 There are **no delete tools**: deleting happens only through the app's buttons.
 
-- **Who the tools act for** comes only from the server: `/mcp` resolves the user (local mode:
-  the seeded user, requests from this computer only) and stores it in a request-scoped
-  `ContextVar` before any tool runs. No tool has a `user_id` argument, and any argument a
-  tool doesn't declare (e.g. an injected `user_id`) is rejected with JSON-RPC error -32602.
+- **Who the tools act for** comes only from the server: `/mcp` resolves the user and stores it
+  in a request-scoped `ContextVar` before any tool runs:
+  - **`AUTH_MODE=jwt` (SMA-61):** the owner of a **personal access token** sent as
+    `Authorization: Bearer <token>`. Missing, malformed, unknown, expired or revoked → **401**
+    with `WWW-Authenticate: Bearer`, before any tool runs. The session cookie is **not**
+    accepted here (it would make `/mcp` a CSRF target).
+  - **`AUTH_MODE=local`:** the seeded user, requests from this computer only.
+- No tool has a `user_id` argument, and any argument a tool doesn't declare (e.g. an
+  injected `user_id`) is rejected with JSON-RPC error -32602.
 - Tasks created through MCP get `created_by: "ai"` (the **AI** marker on the board).
 - Limits: at most 50 tasks listed, 10 notes found, 300-character note snippets, 200-character
   titles, 10,000-character notes.
 
+**Personal access tokens (SMA-61):** made on the **Settings** page (gear icon next to your
+name). `GET /api/tokens` lists mine (name, `prefix` such as `smat_AbCdEfG`, created, expires,
+last used; never the token), `POST /api/tokens` `{"name", "expires_in_days": 30 | 90 | 365}`
+(default 90, at most 10 per user) answers with the token **once**, `DELETE /api/tokens/{id}`
+revokes it. A token is `smat_` + 32 random bytes; only its **SHA-256 hash** is stored (fast
+is fine for a random token; human passwords need Argon2).
+
 Try it with MCP Inspector while the API runs (transport **Streamable HTTP**, URL
-`http://127.0.0.1:8000/mcp`):
+`http://127.0.0.1:8000/mcp`; in `jwt` mode also **Authentication → Bearer Token**: paste a
+token):
 
 ```bat
 npx @modelcontextprotocol/inspector@2.15.0

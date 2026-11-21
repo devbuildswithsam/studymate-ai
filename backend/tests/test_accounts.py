@@ -376,8 +376,9 @@ def test_a_logged_in_user_only_sees_their_own_data(jwt_api):
     assert jwt_api.get("/api/notes").json() == []
 
 
-def test_mcp_refuses_requests_in_jwt_mode_until_access_tokens_exist(jwt_api):
-    # SMA-61 adds personal access tokens; until then /mcp is closed, never open.
+def test_mcp_refuses_a_logged_in_browser_without_a_token(jwt_api):
+    # /mcp takes personal access tokens only (SMA-61), never the session cookie.
+    register(jwt_api)
     response = jwt_api.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
 
     assert response.status_code == 401

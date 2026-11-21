@@ -4,7 +4,8 @@ import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 
-export function CopyButton({ text }: { text: string }) {
+// `label`: what screen readers hear (SMA-61 reuses it for tokens: "Copy token").
+export function CopyButton({ text, label = 'Copy answer' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
 
   async function copy() {
@@ -14,12 +15,7 @@ export function CopyButton({ text }: { text: string }) {
   }
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={copy}
-      aria-label={copied ? 'Copied' : 'Copy answer'}
-    >
+    <Button variant="ghost" size="icon-sm" onClick={copy} aria-label={copied ? 'Copied' : label}>
       {copied ? <CheckIcon /> : <CopyIcon />}
     </Button>
   )

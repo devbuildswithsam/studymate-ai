@@ -1,15 +1,16 @@
-"""/mcp in the FastAPI app: Streamable HTTP, stateless, local mode only. SMA-41.
+"""/mcp in the FastAPI app: Streamable HTTP, stateless. SMA-41, SMA-61.
 
-Every request passes through McpEndpoint first: it finds the user the way the rest of
-the app does (local mode: the seeded user, and only callers on this computer), stores it
-in the tool context, and only then hands the request to the MCP server.
-
-v1.1 (real auth) replaces the local-user part with a bearer-token check (guide 7.2).
+Every request passes through McpEndpoint first: it finds the user, stores it in the tool
+context, and only then hands the request to the MCP server.
+- AUTH_MODE=jwt (SMA-61): the owner of a valid personal access token sent as
+  'Authorization: Bearer <token>'. Anything else: 401 before any tool runs.
+- AUTH_MODE=local: the seeded user, and only callers on this computer.
 """
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.deps import LOOPBACK_HOSTS
@@ -19,8 +20,23 @@ from app.db.session import _session_factory
 from app.errors import error_response
 from app.mcp_server.context import ToolContext, acting_as
 from app.mcp_server.server import mcp_server
+from app.services.access_tokens import owner_of
 from app.services.llm.embeddings import build_embedding_provider
 from app.services.llm.registry import get_registry
+
+BEARER_NEEDED = (
+    "/mcp needs a personal access token: make one on the Settings page and send it as "
+    "'Authorization: Bearer <token>'."
+)
+
+
+def bearer_token(scope: Scope) -> str | None:
+    """The token from 'Authorization: Bearer <token>', or None for anything else."""
+    header = Headers(scope=scope).get("authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
 
 
 class McpEndpoint:
@@ -31,31 +47,35 @@ class McpEndpoint:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         settings = app_settings(scope)
-        if settings.auth_mode != "local":
-            # Real accounts are on, but personal access tokens (SMA-61) aren't built yet:
-            # closed, never open. The session cookie isn't accepted here on purpose (/mcp
-            # is for other programs, and a cookie would make it a CSRF target).
-            response = error_response(
-                401, "/mcp needs a personal access token, which isn't available yet."
-            )
-            await response(scope, receive, send)
-            return
-
-        client = scope.get("client")
-        if (client[0] if client else None) not in LOOPBACK_HOSTS:
-            response = error_response(
-                403, "AUTH_MODE=local only accepts requests from this computer."
-            )
-            await response(scope, receive, send)
-            return
-
         session_factory = _session_factory(settings.database_url)
-        with session_factory() as db:
-            user = find_local_user(db)
-        if user is None:
-            response = error_response(500, "The local user is missing. Run: python -m scripts.seed")
-            await response(scope, receive, send)
-            return
+
+        if settings.auth_mode == "jwt":
+            # SMA-61: a personal access token, and nothing else. The session cookie is NOT
+            # accepted: /mcp is for programs, and a cookie would make it a CSRF target.
+            token = bearer_token(scope)
+            with session_factory() as db:
+                user = owner_of(db, token) if token else None
+            if user is None:
+                response = error_response(401, BEARER_NEEDED)
+                response.headers["WWW-Authenticate"] = 'Bearer realm="StudyMate"'
+                await response(scope, receive, send)
+                return
+        else:
+            client = scope.get("client")
+            if (client[0] if client else None) not in LOOPBACK_HOSTS:
+                response = error_response(
+                    403, "AUTH_MODE=local only accepts requests from this computer."
+                )
+                await response(scope, receive, send)
+                return
+            with session_factory() as db:
+                user = find_local_user(db)
+            if user is None:
+                response = error_response(
+                    500, "The local user is missing. Run: python -m scripts.seed"
+                )
+                await response(scope, receive, send)
+                return
 
         if self.handler is None:
             await error_response(503, "The MCP server is not running.")(scope, receive, send)

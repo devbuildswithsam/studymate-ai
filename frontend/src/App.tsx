@@ -13,6 +13,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { NotesPage } from '@/pages/NotesPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { RegisterPage } from '@/pages/RegisterPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { StudyPage } from '@/pages/StudyPage'
 import { TasksPage } from '@/pages/TasksPage'
 
@@ -83,6 +84,7 @@ export function AppRoutes() {
           <Route path="/study/:conversationId" element={<StudyRoute />} />
           <Route path="/documents/:documentId" element={<DocumentPage />} />
           <Route path="/notes/:noteId" element={<NotesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
     </Routes>

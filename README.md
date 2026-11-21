@@ -173,6 +173,11 @@ python -m scripts.set_password local@studymate.dev
 The same command resets a **forgotten password** for any account ("ask the admin"). It asks
 for the new password twice and never shows it.
 
+**MCP clients with accounts on:** programs like MCP Inspector need a **personal access token**.
+Click the gear icon next to your name (**Settings**), create a token, copy it (it's shown
+once), and give it to the program as a Bearer token with the URL `http://127.0.0.1:8000/mcp`.
+Revoke it there when you no longer need it.
+
 ### If something goes wrong
 
 | You see | Do this |

@@ -22,7 +22,17 @@ from sqlalchemy import func, select
 from app.api.deps import get_current_user
 from app.config import get_settings
 from app.main import app
-from app.models import AgentAction, Conversation, Document, LLMCall, Message, Note, Task, User
+from app.models import (
+    AccessToken,
+    AgentAction,
+    Conversation,
+    Document,
+    LLMCall,
+    Message,
+    Note,
+    Task,
+    User,
+)
 from app.services.auth import LoginLimiter, get_login_limiter, hash_password
 from app.services.llm.fake import FakeProvider
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
@@ -126,7 +136,9 @@ def alices_data(api, two_users, db_session) -> dict[str, str]:
     document = json.loads(upload.text.splitlines()[-1])["document"]
     assert document["status"] == "ready", document  # really searchable
     document_id = document["id"]
+    token_id = client.post("/api/tokens", json={"name": "Alice's MCP"}).json()["id"]  # SMA-61
     return {
+        "token": token_id,
         "conversation": conversation_id,
         "message": reply["message_id"],
         "note": note_id,
@@ -151,6 +163,7 @@ def fingerprint(db_session) -> dict:
         ).all(),
         "actions": db_session.execute(select(AgentAction.id, AgentAction.status)).all(),
         "documents": db_session.execute(select(Document.id, Document.filename)).all(),
+        "tokens": db_session.execute(select(AccessToken.id, AccessToken.name)).all(),
     }
 
 
@@ -176,6 +189,7 @@ ISOLATION_CASES = [
     ("DELETE", "/api/documents/{document_id}", None),
     ("POST", "/api/documents/{document_id}/retry", None),  # SMA-46
     ("POST", "/api/documents/{document_id}/summary", {"style": "short"}),  # SMA-50
+    ("DELETE", "/api/tokens/{token_id}", None),  # SMA-61
 ]
 
 
@@ -186,6 +200,7 @@ def fill(path: str, ids: dict[str, str]) -> str:
         task_id=ids["task"],
         action_id=ids["action"],
         document_id=ids["document"],
+        token_id=ids["token"],
     )
 
 
@@ -219,6 +234,7 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
         "task": UNKNOWN_ID,
         "action": UNKNOWN_ID,
         "document": UNKNOWN_ID,
+        "token": UNKNOWN_ID,
     }
 
     alices = client.request(method, fill(path, alices_data), json=body)
