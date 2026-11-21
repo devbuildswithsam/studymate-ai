@@ -160,8 +160,18 @@ By default the app runs in **local mode**: one user, no login. To try real accou
 3. Restart the API and open <http://localhost:5173>: you'll see **Log in**. Click **Create one**
    to register; the app opens signed in. The sidebar shows who you are and a **Log out** button.
 
-Sessions last 8 hours. There is no "forgot password" yet: ask the admin. Data you made in
-local mode belongs to the local user, not to a new account. Set `AUTH_MODE=local` to go back.
+Sessions last 8 hours. Set `AUTH_MODE=local` to go back.
+
+**Your local-mode data** belongs to the local user, who has no password. To use it with
+accounts, give it one (from `backend\` with the venv active), then log in as
+`local@studymate.dev`:
+
+```bat
+python -m scripts.set_password local@studymate.dev
+```
+
+The same command resets a **forgotten password** for any account ("ask the admin"). It asks
+for the new password twice and never shows it.
 
 ### If something goes wrong
 

@@ -183,6 +183,28 @@ Writing a migration on SQLite (lessons from SMA-33):
 - `tests/test_migrations.py` steps back over **every** migration and forward again on a
   database with data, and checks nothing is lost. Back up `app.db` before trying a downgrade.
 
+## Admin: set or reset a password (SMA-60)
+From `backend\` with the venv active (it uses `DATABASE_URL` from `.env`, or `--database-url`):
+
+```bat
+python -m scripts.set_password local@studymate.dev
+```
+
+- **v1.0 data in accounts mode:** everything made in local mode belongs to the local user
+  (`local@studymate.dev`, no password). Giving it a password lets you log in as it with
+  `AUTH_MODE=jwt` and keep all of it; nothing is copied or migrated.
+- **Forgotten passwords:** the same command for any account (the Login page says "ask the
+  admin"). Same rules as registering (8–128 characters); typed twice, never shown or printed.
+  Sessions already open stay valid until they expire (8 hours).
+
+## Two-account isolation (SMA-34, SMA-60)
+`tests/test_isolation.py` runs every case twice: with the identity swapped in, and with
+**real sessions** (`AUTH_MODE=jwt`, Alice and Bob logging in from their own clients, each
+with its own session cookie and CSRF token). Bob gets 404 on every route with an id of
+Alice's, sees none of her items in lists and search, his AI's tools (`list_tasks`,
+`search_notes`, `search_documents`) find nothing of hers, and a card his AI makes for her
+task fails when he confirms it. A browser that never logged in gets 401/403 everywhere.
+
 ## Dev scripts
 From `backend\` with the venv active. These **do** call the real APIs (they need keys):
 

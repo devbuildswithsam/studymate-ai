@@ -968,3 +968,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-60 — Two real accounts can't see each other's data
+**Date:** 21 Nov 2026
+
+**What I did**
+- The isolation suite now runs every case twice: as before (identity swapped in) and with **real sessions** (accounts mode, Alice and Bob logging in with passwords from their own clients, each with its own cookie and CSRF token). Bob gets 404 on all 18 routes with Alice's ids, sees nothing of hers in lists and search, and changes nothing.
+- New tests for the AI's tools: Bob's `list_tasks`, `search_notes` and `search_documents` find nothing of Alice's, and a card his AI makes for her task fails when he confirms it.
+- Decided what happens to v1.0 data: `python -m scripts.set_password local@studymate.dev` gives the local user a password, so its data works in accounts mode with nothing copied. The same script resets forgotten passwords ("ask the admin").
+
+**What I learned**
+- **Test the real path, not a shortcut:** swapping in the identity is fast, but logging in for real tests cookies, tokens and CSRF too.
+- **Shared state in tests can lie:** with one client and "the last act_as wins", a later fixture quietly turned "Bob" into Alice. Separate clients with their own cookies can't make that mistake.
+- **A passing test must be able to fail:** mutation testing showed my retrieval test couldn't fail, because Alice's document was too short to ever be searchable. Now the test checks it's ready first.
+- **Check the checker:** my mutation run said "caught" while running zero tests (a broken `-k` filter). Always read the numbers, not only the verdict.
+- **Migrations aren't always copies:** the v1.0 data already belonged to a user row, so giving that user a password was enough.
+- **Admin scripts need the same care as the app:** `getpass` hides the password, it's typed twice, the same rules apply, and nothing is printed.
+
+**What confused me**
+- …

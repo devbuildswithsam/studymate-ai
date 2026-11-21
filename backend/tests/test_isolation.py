@@ -1,12 +1,16 @@
-"""Two-user isolation: user B can never see or change user A's data. SMA-34 (guide 7.1a).
+"""Two-user isolation: user B can never see or change user A's data. SMA-34, SMA-60.
 
-The app runs single-user (AUTH_MODE=local), but every query is already scoped by user_id.
-These tests prove it with two real users. B always gets 404, exactly like an id that
-doesn't exist: a 403 would tell B that A's item exists.
+Every query is scoped by user_id. These tests prove it with two users. B always gets 404,
+exactly like an id that doesn't exist: a 403 would tell B that A's item exists.
+
+Each test that uses `api` runs TWICE (SMA-60, the Stage 5 Done-when):
+- "identity override": get_current_user is replaced, as before (fast, any auth mode);
+- "real sessions": AUTH_MODE=jwt, and Alice and Bob each log in with a password over
+  HTTPS from their own client: their own session cookie and CSRF token, like two
+  browsers. Nothing is faked between the request and the database.
 
 KEEP THIS FILE GROWING: every route with an id in its path must have a case in
-ISOLATION_CASES. test_every_route_with_an_id_is_covered fails when a new one is missing
-(tasks and documents in later stages).
+ISOLATION_CASES. test_every_route_with_an_id_is_covered fails when a new one is missing.
 """
 
 import json
@@ -16,34 +20,67 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.api.deps import get_current_user
+from app.config import get_settings
 from app.main import app
 from app.models import AgentAction, Conversation, Document, LLMCall, Message, Note, Task, User
+from app.services.auth import LoginLimiter, get_login_limiter, hash_password
 from app.services.llm.fake import FakeProvider
+from app.services.llm.fallback import FallbackManager, get_fallback_manager
+from app.services.llm.registry import get_registry
+from tests.auth_helpers import act_like_our_frontend, jwt_settings
 from tests.test_conversations_api import use_fakes
+from tests.tool_helpers import REGISTRY as TOOL_REGISTRY
+from tests.tool_helpers import call
 
 UNKNOWN_ID = "00000000-0000-0000-0000-000000000000"
+PASSWORD = "a long enough password"
+PASSWORD_HASH = hash_password(PASSWORD)  # once: Argon2 is slow on purpose
 
 
 @pytest.fixture
 def two_users(db_session) -> tuple[User, User]:
-    alice = User(email="alice@example.com", name="Alice")
-    bob = User(email="bob@example.com", name="Bob")
+    alice = User(email="alice@example.com", name="Alice", password_hash=PASSWORD_HASH)
+    bob = User(email="bob@example.com", name="Bob", password_hash=PASSWORD_HASH)
     db_session.add_all([alice, bob])
     db_session.commit()
     return alice, bob
 
 
-@pytest.fixture
-def api(client, two_users):
-    """The test client, a fake AI, and as(user) to choose who is making the requests."""
+@pytest.fixture(params=["identity override", "real sessions"])
+def api(request, client, two_users, db_url):
+    """A fake AI, and as(user): the client that makes requests as that user."""
     use_fakes({"main": FakeProvider(replies=["F = m * a."]), "backup": FakeProvider()})
 
-    def act_as(user: User) -> TestClient:
-        # The one place identity comes from: replacing it here is how a test "logs in".
-        app.dependency_overrides[get_current_user] = lambda: user
-        return client
+    if request.param == "identity override":
 
-    return act_as
+        def act_as(user: User) -> TestClient:
+            # Replacing the one place identity comes from is how this variant "logs in".
+            app.dependency_overrides[get_current_user] = lambda: user
+            return client
+
+        return act_as
+
+    # Real sessions: real accounts mode, and one logged-in browser per user.
+    settings = jwt_settings(db_url)
+    limiter = LoginLimiter()
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_login_limiter] = lambda: limiter
+    browsers = {}
+    for user in two_users:
+        browser = TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000))
+        act_like_our_frontend(browser)
+        login = browser.post("/api/auth/login", json={"email": user.email, "password": PASSWORD})
+        assert login.status_code == 200, login.text
+        browsers[user.id] = browser
+    return lambda user: browsers[user.id]
+
+
+def test_the_two_variants_really_differ(api, two_users):
+    # Guards the guard: in "real sessions" no identity is injected, each browser holds its
+    # own cookie, and the server tells them apart by that cookie alone.
+    alice, bob = two_users
+    assert api(alice).get("/api/auth/me").json()["email"] == "alice@example.com"
+    assert api(bob).get("/api/auth/me").json()["email"] == "bob@example.com"
 
 
 @pytest.fixture
@@ -79,11 +116,16 @@ def alices_data(api, two_users, db_session) -> dict[str, str]:
     )
     db_session.add(card)
     db_session.commit()
+    # Enough text to be READY and searchable (under 20 letters counts as "no text", SMA-45):
+    # otherwise "Bob's search finds nothing of Alice's" would pass for the wrong reason.
+    notes = b"# Thermodynamics\n\nAlice's notes: entropy always increases in an isolated system."
     upload = client.post(
-        "/api/documents", files={"file": ("Alice's notes.md", b"# Thermodynamics", "text/markdown")}
+        "/api/documents", files={"file": ("Alice's notes.md", notes, "text/markdown")}
     )
     # SMA-47: the upload streams one JSON event per line; the last one holds the document.
-    document_id = json.loads(upload.text.splitlines()[-1])["document"]["id"]
+    document = json.loads(upload.text.splitlines()[-1])["document"]
+    assert document["status"] == "ready", document  # really searchable
+    document_id = document["id"]
     return {
         "conversation": conversation_id,
         "message": reply["message_id"],
@@ -237,6 +279,83 @@ def test_b_s_own_items_are_separate_from_a_s(api, two_users, alices_data):
     assert [n["title"] for n in api(bob).get("/api/notes").json()] == ["Bob's note"]
     assert [n["title"] for n in api(alice).get("/api/notes").json()] == ["Alice's note"]
     assert api(alice).get(f"/api/notes/{bobs_note['id']}").status_code == 404  # both ways
+
+
+def test_without_a_session_nothing_of_a_s_is_reachable(api, two_users, alices_data, db_url):
+    # Real sessions only: a browser that never logged in gets 401 everywhere.
+    if app.dependency_overrides.get(get_current_user):
+        pytest.skip("only meaningful with real sessions")
+    stranger = TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000))
+
+    for method, path, body in ISOLATION_CASES:
+        response = stranger.request(method, fill(path, alices_data), json=body)
+        # 401 (no session), or 403 when the CSRF check stops a write first. Never data.
+        assert response.status_code in (401, 403), (method, path, response.status_code)
+
+
+# --- The AI's tools act only for the signed-in user (SMA-42, SMA-48, SMA-60) ------
+
+
+@pytest.fixture
+def bobs_ai(api, two_users):
+    """Bob's browser, with a tool-using fake AI: set .replies, then send a message."""
+    _, bob = two_users
+    fake = FakeProvider(replies=["plain answer"])
+    manager = FallbackManager(TOOL_REGISTRY, lambda model: fake)
+    app.dependency_overrides[get_registry] = lambda: TOOL_REGISTRY
+    app.dependency_overrides[get_fallback_manager] = lambda: manager
+
+    def ask(message: str, *replies) -> dict:
+        # api(bob) at send time: with "identity override" the LAST act_as wins, and other
+        # fixtures (alices_data) may act as Alice after this one was set up.
+        browser = api(bob)
+        fake.replies = list(replies)
+        chat_id = browser.post("/api/conversations", json={}).json()["id"]
+        response = browser.post(f"/api/conversations/{chat_id}/messages", json={"message": message})
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    return lambda: api(bob), ask
+
+
+def test_b_s_ai_finds_nothing_of_a_s(bobs_ai, alices_data):
+    _, ask = bobs_ai
+
+    reply = ask(
+        "What do I have about Alice and thermodynamics?",
+        [
+            call("list_tasks", {}, "c1"),
+            call("search_notes", {"query": "Alice"}, "c2"),
+            call("search_documents", {"query": "Thermodynamics"}, "c3"),
+        ],
+        "Nothing found.",
+    )
+
+    results = {step["name"]: step["result"] for step in reply["tool_calls"]}
+    assert set(results) == {"list_tasks", "search_notes", "search_documents"}
+    assert all(not step["is_error"] for step in reply["tool_calls"])
+    for result in results.values():
+        assert "Alice" not in result  # her task, note and document stay invisible
+
+
+def test_b_s_ai_cannot_change_a_s_task_even_after_b_confirms(bobs_ai, alices_data, db_session):
+    bobs_browser, ask = bobs_ai
+    before = fingerprint(db_session)
+
+    # Bob's AI tries to complete Alice's task: a change, so it waits as a card for Bob...
+    reply = ask(
+        "Complete all my tasks",
+        [call("complete_task", {"task_id": alices_data["task"]})],
+        "I've prepared that for you.",
+    )
+    card = reply["actions"][0]
+    assert "Alice" not in card["summary"]  # the card doesn't reveal her task's title
+    # ...and even when Bob confirms it, the tool can't see Alice's task.
+    confirmed = bobs_browser().post(f"/api/actions/{card['id']}/confirm")
+
+    assert confirmed.json()["status"] == "failed"
+    after = fingerprint(db_session)
+    assert after["tasks"] == before["tasks"]  # Alice's task is still "todo"
 
 
 def test_a_still_sees_everything_after_b_tried(api, two_users, alices_data):

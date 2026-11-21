@@ -15,7 +15,7 @@ from app.services.llm.embeddings import get_embedder
 from app.services.llm.fake import FakeEmbeddingProvider, FakeProvider
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import get_registry
-from tests.auth_helpers import CSRF_COOKIE, CSRF_HEADER, UNSAFE_METHODS, jwt_settings
+from tests.auth_helpers import act_like_our_frontend, jwt_settings
 from tests.tool_helpers import REGISTRY as TOOL_REGISTRY
 
 
@@ -91,14 +91,7 @@ def jwt_api(db_url):
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_login_limiter] = lambda: limiter
     with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
-        c.auto_csrf = True
-
-        def add_csrf_header(request):
-            token = c.cookies.get(CSRF_COOKIE)
-            if c.auto_csrf and request.method in UNSAFE_METHODS and token:
-                request.headers.setdefault(CSRF_HEADER, token)
-
-        c.event_hooks["request"].append(add_csrf_header)
+        act_like_our_frontend(c)
         yield c
     app.dependency_overrides.clear()
 
