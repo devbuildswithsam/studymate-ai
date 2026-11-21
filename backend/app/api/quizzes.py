@@ -27,6 +27,7 @@ from app.repositories import quizzes as repo
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelRegistry, get_registry
 from app.services.quiz import QuizFailed, generate_quiz
+from app.services.rate_limits import rate_limit
 
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
@@ -109,7 +110,12 @@ def my_quiz(db: Session, user_id: str, quiz_id: str) -> Quiz:
     return quiz
 
 
-@router.post("", response_model=QuizOut, status_code=201)
+@router.post(
+    "",
+    response_model=QuizOut,
+    status_code=201,
+    dependencies=[Depends(rate_limit("generate"))],  # SMA-67
+)
 def create_quiz(
     body: QuizCreate,
     user_id: CurrentUserId,

@@ -14,11 +14,13 @@ export function friendlyError(error: unknown): string {
       // The dev proxy answers 502/504 (empty body) when FastAPI isn't running.
       return UNREACHABLE
     }
-    if (error.status === 503 || error.status === 429) {
+    if (error.status === 503) {
       // Backend: every model is rate-limited or down (AllModelsFailedError -> 503).
       return 'The AI is busy right now (free-tier limits). Please try again in a minute.'
     }
-    return error.message // our backend's own message, e.g. a 422 validation error
+    // Our backend's own message, e.g. a 422 validation error, or a 429 from our own rate
+    // limits (SMA-67), which says how many seconds to wait.
+    return error.message
   }
   // fetch itself failed: no answer at all (network down, server gone).
   return UNREACHABLE

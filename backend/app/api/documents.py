@@ -34,6 +34,7 @@ from app.services.llm.exceptions import LLMConfigError
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.rag.embed import EmbeddingFailed, embed_document, failure_message
 from app.services.rag.ingest import ingest
+from app.services.rate_limits import rate_limit
 from app.services.summary import Style, SummaryFailed, summarize_document
 from app.services.uploads import MAX_UPLOAD_BYTES, UploadRejected, check_upload
 
@@ -67,7 +68,12 @@ def document_out(document: Document, has_chunks: bool) -> DocumentOut:
     return out
 
 
-@router.post("", status_code=201, response_class=StreamingResponse)
+@router.post(
+    "",
+    status_code=201,
+    response_class=StreamingResponse,
+    dependencies=[Depends(rate_limit("upload"))],  # SMA-67
+)
 def upload_document(
     file: UploadFile,
     user_id: CurrentUserId,
@@ -140,7 +146,11 @@ def get_document(document_id: str, user_id: CurrentUserId, db: Db) -> DocumentOu
     return document_out(document, bool(repo.ids_with_chunks(db, [document.id])))
 
 
-@router.post("/{document_id}/retry", response_model=DocumentOut)
+@router.post(
+    "/{document_id}/retry",
+    response_model=DocumentOut,
+    dependencies=[Depends(rate_limit("upload"))],  # embeds again (SMA-67)
+)
 def retry_document(
     document_id: str,
     user_id: CurrentUserId,
@@ -178,7 +188,11 @@ class SummaryRequest(BaseModel):
     style: Style = "short"  # "short" or "detailed" (wireframe 6.4)
 
 
-@router.post("/{document_id}/summary", response_model=DocumentOut)
+@router.post(
+    "/{document_id}/summary",
+    response_model=DocumentOut,
+    dependencies=[Depends(rate_limit("generate"))],  # an AI call (SMA-67)
+)
 def regenerate_summary(
     document_id: str,
     body: SummaryRequest,

@@ -32,6 +32,23 @@ With the API running (see the README):
     upload add it automatically. Login and register need no token (no session yet), only
     the Origin check. `GET /api/auth/me` restores a missing CSRF cookie; logout deletes it.
   - `/mcp` is skipped: programs use Bearer tokens there, never cookies (SMA-61).
+- **Rate limits (SMA-67, `app/services/rate_limits.py`):** per user (from the session), a
+  sliding window of 60 s: **20** `POST .../messages` (normal or streamed), **5** uploads
+  (`POST /api/documents`, and `.../retry`, which embeds again), **5** generations
+  (`POST /api/quizzes`, `POST /api/decks`, `POST /api/documents/{id}/summary`, together).
+  Over the limit: **429** `rate_limited`, "Too many messages in a short time. Please try again
+  in 23 seconds.", and a `Retry-After: 23` header; nothing runs. Refused requests don't count.
+  In memory (one server process; a restart forgets). The frontend shows the message as is.
+- **Answer cache (SMA-67, `app/services/answer_cache.py`):** a study answer is reused when
+  the user, the chat's documents, the question (ignoring case and spaces), the earlier
+  messages and the model choice are all the same; one hour, at most 500 answers, in memory.
+  A cached reply has `"cached": true`, 0 tokens, no `llm_calls` row, and streams as one
+  `token` event. Errors and stopped answers are never cached; quizzes and flashcards never
+  (asking again should give new ones); summaries are stored with the document (SMA-50).
+- **Total time limit per AI call (SMA-67, `FallbackManager`, `CALL_TIME_LIMIT_SECONDS` = 90):**
+  the call runs in a helper thread; past 90 s it is a **timeout** (`llm_calls.error_type`
+  `timeout`) and the next model is tried, or a streamed answer is cut off with what arrived.
+  The abandoned call can't reach the student any more (its stream goes quiet).
 - **In the browser (SMA-59):** `/login` and `/register` are open; every other page sits
   behind `RequireAuth` (`frontend/src/components/auth/`), which asks `GET /api/auth/me`.
   "Nobody" → Login, then back to the page you wanted. A 401 from **any** request makes the

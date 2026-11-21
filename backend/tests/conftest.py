@@ -10,11 +10,13 @@ from app.config import BACKEND_DIR, Settings, get_settings
 from app.db.seed import ensure_local_user
 from app.db.session import make_engine
 from app.main import app
+from app.services.answer_cache import AnswerCache, get_answer_cache
 from app.services.auth import LoginLimiter, get_login_limiter
 from app.services.llm.embeddings import get_embedder
 from app.services.llm.fake import FakeEmbeddingProvider, FakeProvider
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import get_registry
+from app.services.rate_limits import RateLimiter, get_rate_limiter
 from tests.auth_helpers import act_like_our_frontend, jwt_settings
 from tests.tool_helpers import REGISTRY as TOOL_REGISTRY
 
@@ -28,6 +30,18 @@ def alembic_config(database_url: str) -> Config:
 def run_migrations(database_url: str) -> None:
     """`alembic upgrade head` against the given database (SMA-27), from Python."""
     command.upgrade(alembic_config(database_url), "head")
+
+
+@pytest.fixture(autouse=True)
+def fresh_limits_and_cache():
+    """SMA-67: every test starts with its own rate limiter and answer cache. The app keeps
+    one of each in memory; shared across tests, counts and answers would leak between them."""
+    limiter, cache = RateLimiter(), AnswerCache()
+    app.dependency_overrides[get_rate_limiter] = lambda: limiter
+    app.dependency_overrides[get_answer_cache] = lambda: cache
+    yield
+    app.dependency_overrides.pop(get_rate_limiter, None)
+    app.dependency_overrides.pop(get_answer_cache, None)
 
 
 @pytest.fixture

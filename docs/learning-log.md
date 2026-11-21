@@ -1120,3 +1120,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-67 — Rate limits, an answer cache and a total time limit per AI call
+**Date:** 21 Nov 2026
+
+**What I did**
+- Per-user rate limits (20 chat messages, 5 uploads, 5 quiz/flashcard/summary generations per minute) as a FastAPI dependency; over the limit a 429 that says how many seconds to wait, with a `Retry-After` header (the error handler now keeps headers).
+- A cache for identical study questions: the same user, documents, question, history and model reuse the checked answer with its citations; no AI call, 0 tokens.
+- A 90-second total limit for every AI call in the FallbackManager: the call runs in a helper thread and we stop waiting; a timed-out call falls back like any timeout.
+- Tests first: 11 rate-limit, 16 cache and 7 time-limit tests; 19 mutants (17 caught, 1 redundant line removed, 1 race guard accepted); a live run (2.2 s first answer, 0.0 s cached, 83 streamed pieces under the limit).
+
+**What I learned**
+- **Sliding window:** "at most 20 in any 60 seconds" is fairer than "20 per clock minute", which allows 40 in two seconds around the minute change.
+- **A cache key must hold everything the answer depends on:** user, documents, earlier messages, model. Forget one and someone gets a wrong (or someone else's) answer.
+- **Timeouts are per read, not per call:** a server sending a byte every 59 s never trips a 60 s timeout. A total deadline needs its own mechanism.
+- **Python can't kill a thread:** we can only stop waiting. So the abandoned call writes to its own stream, which goes quiet the moment we give up.
+- **Singletons leak between tests:** the in-memory limiter and cache are swapped for fresh ones in every test (an autouse fixture).
+
+**What confused me**
+- …

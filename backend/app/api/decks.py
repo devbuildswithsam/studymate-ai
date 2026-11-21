@@ -30,6 +30,7 @@ from app.repositories import quizzes as quizzes_repo
 from app.services.flashcards import CARDS_FROM, FlashcardsFailed, generate_cards
 from app.services.llm.fallback import FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelRegistry, get_registry
+from app.services.rate_limits import rate_limit
 
 router = APIRouter(prefix="/api/decks", tags=["flashcards"])
 
@@ -112,7 +113,12 @@ def my_deck(db: Session, user_id: str, deck_id: str) -> Deck:
     return deck
 
 
-@router.post("", response_model=DeckOut, status_code=201)
+@router.post(
+    "",
+    response_model=DeckOut,
+    status_code=201,
+    dependencies=[Depends(rate_limit("generate"))],  # SMA-67
+)
 def create_deck(
     body: DeckCreate,
     user_id: CurrentUserId,

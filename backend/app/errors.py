@@ -30,15 +30,23 @@ CODES_BY_STATUS = {
 }
 
 
-def error_response(status_code: int, message: str, code: str | None = None) -> JSONResponse:
+def error_response(
+    status_code: int,
+    message: str,
+    code: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     code = code or CODES_BY_STATUS.get(status_code, "error")
     return JSONResponse(
-        status_code=status_code, content={"error": {"code": code, "message": message}}
+        status_code=status_code,
+        content={"error": {"code": code, "message": message}},
+        headers=headers,
     )
 
 
 async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return error_response(exc.status_code, str(exc.detail))
+    # The exception's headers are kept: e.g. Retry-After on a 429 (SMA-67).
+    return error_response(exc.status_code, str(exc.detail), headers=exc.headers)
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -39,6 +39,7 @@ from app.repositories import conversations as repo
 from app.services import chat_streams
 from app.services.actions import record_actions
 from app.services.agent import ToolStep, run_agent_for_user
+from app.services.answer_cache import AnswerCache, cache_key, get_answer_cache
 from app.services.chat_streams import CUT_OFF_NOTE, STOPPED_NOTE
 from app.services.llm.base import ChatOptions, ChatResponse, Message, TextStream
 from app.services.llm.embeddings import EmbeddingProvider, get_embedder
@@ -49,6 +50,7 @@ from app.services.llm.exceptions import (
 )
 from app.services.llm.fallback import Attempt, FallbackManager, get_fallback_manager
 from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
+from app.services.rate_limits import rate_limit
 from app.services.study import StudyError, answer_from_documents
 from app.services.titles import generate_title
 from app.services.tool_policy import asks_to_act
@@ -199,6 +201,7 @@ class ChatReply(BaseModel):
     tokens_in: int
     tokens_out: int
     stopped: bool = False  # SMA-62: the student pressed Stop; `reply` is what arrived
+    cached: bool = False  # SMA-67: the same study question was answered before: no AI call
 
 
 # --- Conversations CRUD ------------------------------------------------------------
@@ -282,6 +285,7 @@ class Turn:
     stream: TextStream | None = None  # None: answer in one piece (JSON)
     on_tool: Callable[[ToolStep], None] | None = None
     token: Any = None  # the event loop's token, when called from a stream's own thread
+    cache: AnswerCache | None = None  # SMA-67: answers to identical study questions
 
 
 class AnswerCutOff(Exception):
@@ -292,7 +296,12 @@ class AnswerCutOff(Exception):
         self.message_id = message_id
 
 
-@router.post("/{conversation_id}/messages", response_model=ChatReply)
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=ChatReply,
+    # SMA-67: checked before anything else, so a 429 is never a broken stream.
+    dependencies=[Depends(rate_limit("chat"))],
+)
 def send_message(
     conversation_id: str,
     request: SendMessage,
@@ -303,11 +312,12 @@ def send_message(
     manager: Annotated[FallbackManager, Depends(get_fallback_manager)],
     settings: Annotated[Settings, Depends(get_settings)],
     embedder: Annotated[Callable[[], EmbeddingProvider], Depends(get_embedder)],
+    cache: Annotated[AnswerCache, Depends(get_answer_cache)],
 ) -> ChatReply | StreamingResponse:
     # Checked first, so a wrong id or model is a normal 404/400, never a broken stream.
     conversation = my_conversation(db, user_id, conversation_id)
     model_id = choose_model(request, conversation, registry)
-    turn = Turn(user_id, request, model_id, registry, manager, settings, embedder)
+    turn = Turn(user_id, request, model_id, registry, manager, settings, embedder, cache=cache)
     if "text/event-stream" in http_request.headers.get("accept", ""):
         return stream_reply(http_request, conversation_id, turn)  # SMA-62
     return chat_turn(db, conversation, turn)
@@ -489,11 +499,20 @@ def study_answer(db: Session, conversation: Conversation, turn: Turn) -> ChatRep
         {"role": m.role, "content": m.content}
         for m in repo.recent_messages(db, user_id, conversation.id, MAX_HISTORY_MESSAGES)
     ]
+    document_ids = repo.document_ids_of(db, conversation.id)
+    # SMA-67: everything the answer depends on is in the key (see answer_cache.py).
+    key = cache_key(
+        user_id, document_ids, request.message, history, model_id, request.allow_fallback
+    )
+    if turn.cache is not None and (cached := turn.cache.get(key)) is not None:
+        if turn.stream is not None:
+            turn.stream.send(cached["text"])  # a cached answer arrives in one piece
+        return save_study_reply(db, conversation, turn, cached, tokens=(0, 0), cached=True)
     try:
         answer = answer_from_documents(
             db,
             user_id,
-            repo.document_ids_of(db, conversation.id),
+            document_ids,
             request.message,
             history,
             turn.manager,
@@ -514,39 +533,64 @@ def study_answer(db: Session, conversation: Conversation, turn: Turn) -> ChatRep
         raise HTTPException(400, str(e)) from e
 
     stopped = answer.response.stopped
-    text = finished_text(answer.text, stopped)
-    if request.model:  # the user switched models: remember it for this conversation
-        conversation.provider = turn.registry.get(model_id).provider
-        conversation.model = model_id
-    repo.add_message(db, conversation, role="user", content=request.message)
+    result = {
+        "text": finished_text(answer.text, stopped),
+        "citations": answer.citations,  # [] = "Not found in your documents"
+        "provider": answer.response.provider,
+        "model": answer.response.model,
+        "fallback_used": answer.fallback_used,
+        "fallback_reason": answer.fallback_reason,
+    }
+    repo.log_llm_calls(db, user_id, conversation.id, answer.attempts, "grounded")
+    if turn.cache is not None and not stopped:  # half an answer is never reused
+        turn.cache.put(key, result)
+    return save_study_reply(
+        db, conversation, turn, result, (answer.tokens_in, answer.tokens_out), stopped=stopped
+    )
+
+
+def save_study_reply(
+    db: Session,
+    conversation: Conversation,
+    turn: Turn,
+    result: dict[str, Any],
+    tokens: tuple[int, int],
+    stopped: bool = False,
+    cached: bool = False,
+) -> ChatReply:
+    """Save the question and its study answer (new or from the cache), and reply."""
+    if turn.request.model:  # the user switched models: remember it for this conversation
+        conversation.provider = turn.registry.get(turn.model_id).provider
+        conversation.model = turn.model_id
+    repo.add_message(db, conversation, role="user", content=turn.request.message)
     saved = repo.add_message(
         db,
         conversation,
         role="assistant",
-        content=text,
-        provider=answer.response.provider,
-        model=answer.response.model,
+        content=result["text"],
+        provider=result["provider"],
+        model=result["model"],
         mode="grounded",
-        fallback_used=answer.fallback_used,
-        tokens_in=answer.tokens_in,
-        tokens_out=answer.tokens_out,
-        citations=answer.citations,  # [] = "Not found in your documents"
+        fallback_used=result["fallback_used"],
+        tokens_in=tokens[0],
+        tokens_out=tokens[1],
+        citations=result["citations"],
     )
-    repo.log_llm_calls(db, user_id, conversation.id, answer.attempts, "grounded")
     db.commit()
     return ChatReply(
         conversation_id=conversation.id,
         message_id=saved.id,
-        reply=text,
-        provider=answer.response.provider,
-        model=answer.response.model,
+        reply=result["text"],
+        provider=result["provider"],
+        model=result["model"],
         mode="grounded",
-        citations=[CitationOut(**c) for c in answer.citations],
-        fallback_used=answer.fallback_used,
-        fallback_reason=answer.fallback_reason,
-        tokens_in=answer.tokens_in,
-        tokens_out=answer.tokens_out,
+        citations=[CitationOut(**c) for c in result["citations"]],
+        fallback_used=result["fallback_used"],
+        fallback_reason=result["fallback_reason"],
+        tokens_in=tokens[0],
+        tokens_out=tokens[1],
         stopped=stopped,
+        cached=cached,
     )
 
 

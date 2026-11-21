@@ -209,6 +209,10 @@ StudyMate runs on free API tiers, which change often. As of November 2026:
   model. Its free tier was often slow or overloaded during development (timeouts, 503s;
   [ADR-0007](docs/adr/0007-groq-as-default-model.md)). Embeddings are sent in small batches to
   stay under its limits.
+- **The app's own limits (SMA-67)** protect those quotas: per user, at most 20 chat messages,
+  5 uploads and 5 quizzes/flashcard decks (or summary rewrites) per minute; over that, a
+  "try again in N seconds" message. The same study question on the same documents is answered
+  from a one-hour cache (no AI call), and no AI call may take more than 90 seconds in total.
 - **Gemini's free tier may use your prompts to improve Google's models.** Only upload and
   ask about **public** study material, never anything private.
 - Model names and abilities live in one file only,

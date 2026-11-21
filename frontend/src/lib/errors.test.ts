@@ -9,8 +9,13 @@ const UNREACHABLE = "Can't reach the server. Is the backend running?"
 const BUSY = 'The AI is busy right now (free-tier limits). Please try again in a minute.'
 
 describe('friendlyError', () => {
-  it.each([503, 429])('HTTP %i (every model busy or rate-limited) -> busy', (status) => {
-    expect(friendlyError(new ApiError(status, 'x', 'technical detail'))).toBe(BUSY)
+  it('HTTP 503 (every model busy or rate-limited) -> busy', () => {
+    expect(friendlyError(new ApiError(503, 'x', 'technical detail'))).toBe(BUSY)
+  })
+
+  it('HTTP 429 (SMA-67: my own rate limit) -> the message, which says when to retry', () => {
+    const limited = 'Too many messages in a short time. Please try again in 23 seconds.'
+    expect(friendlyError(new ApiError(429, 'rate_limited', limited))).toBe(limited)
   })
 
   it.each([502, 504])(

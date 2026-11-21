@@ -52,6 +52,7 @@ export type ChatReply = {
   tokens_in: number
   tokens_out: number
   stopped?: boolean // SMA-62: the Stop button was pressed; `reply` is what arrived
+  cached?: boolean // SMA-67: the same study question was answered before (no AI call)
 }
 
 /** Same fields as the backend's ConversationOut (only what we use so far). */

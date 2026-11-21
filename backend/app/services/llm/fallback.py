@@ -2,9 +2,16 @@
 
 The rest of the app asks the manager, never an adapter directly. Every answer is
 labelled with whether a fallback was used and why, so the UI can say so.
+
+SMA-67: every call has a TOTAL time limit (CALL_TIME_LIMIT_SECONDS). The HTTP client's
+60 s timeout is per read: a server sending a little every 59 s never trips it (one eval
+call ran for 98 minutes). So the call runs in a helper thread and we wait for it at most
+that long; past it, the call counts as timed out, like any other timeout.
 """
 
+import contextvars
 import logging
+import threading
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -35,6 +42,7 @@ from app.services.llm.registry import ModelConfig, ModelRegistry, get_registry
 logger = logging.getLogger(__name__)
 
 DEFAULT_COOLDOWN_SECONDS = 60  # how long to skip a model after a 429 with no wait time
+CALL_TIME_LIMIT_SECONDS = 90  # the most one AI call may take, start to finish (SMA-67)
 
 
 @dataclass
@@ -68,10 +76,12 @@ class FallbackManager:
         registry: ModelRegistry,
         provider_factory: Callable[[ModelConfig], LLMProvider],
         clock: Callable[[], float] = time.monotonic,  # tests pass a fake clock
+        call_time_limit: float = CALL_TIME_LIMIT_SECONDS,  # tests use a fraction of a second
     ):
         self.registry = registry
         self.provider_factory = provider_factory
         self.clock = clock
+        self.call_time_limit = call_time_limit
         self._providers: dict[str, LLMProvider] = {}  # built once per model, then reused
         self._rate_limited_until: dict[str, float] = {}  # model id -> clock time
 
@@ -153,10 +163,7 @@ class FallbackManager:
             is_fallback = model.id != candidates[0].id
             try:
                 provider = self._provider(model)
-                if stream is None:
-                    response = provider.chat(messages, options)
-                else:
-                    response = provider.chat_stream(messages, options, stream)
+                response = self._call_within_limit(provider, messages, options, stream)
             except LLMError as e:
                 attempts.append(
                     Attempt(
@@ -199,6 +206,53 @@ class FallbackManager:
         raise AllModelsFailedError(
             "no model could answer: " + "; ".join(reasons), reasons, attempts
         )
+
+    def _call_within_limit(
+        self,
+        provider: LLMProvider,
+        messages: list[Message],
+        options: ChatOptions | None,
+        stream: TextStream | None,
+    ) -> ChatResponse:
+        """One call, given at most `call_time_limit` seconds in total (SMA-67).
+
+        Python can't kill a thread, so a call past the limit is abandoned: it ends on its
+        own later (its HTTP reads still time out). Until then it must not reach the
+        student, so a streamed call writes to its own small stream, which goes quiet (and
+        asks the provider to stop) the moment we give up on it.
+        """
+        gave_up = threading.Event()
+        own_stream = None
+        if stream is not None:
+            own_stream = TextStream(
+                on_text=lambda piece: None if gave_up.is_set() else stream.send(piece),
+                should_stop=lambda: gave_up.is_set() or stream.should_stop(),
+            )
+        outcome: dict[str, object] = {}
+
+        def call() -> None:
+            try:
+                if own_stream is None:
+                    outcome["response"] = provider.chat(messages, options)
+                else:
+                    outcome["response"] = provider.chat_stream(messages, options, own_stream)
+            except BaseException as e:  # noqa: BLE001 - handed over to the waiting thread
+                outcome["error"] = e
+
+        # copy_context: the helper thread sees the same context variables (e.g. SMA-68's
+        # request id for the logs) as the thread that asked.
+        context = contextvars.copy_context()
+        helper = threading.Thread(target=context.run, args=(call,), daemon=True)
+        helper.start()
+        helper.join(self.call_time_limit)
+        if helper.is_alive():
+            gave_up.set()
+            raise ProviderTimeoutError(
+                f"no complete answer within {self.call_time_limit:g} s", provider.name
+            )
+        if "error" in outcome:
+            raise outcome["error"]  # type: ignore[misc]
+        return outcome["response"]  # type: ignore[return-value]
 
     def _ms(self, started: float) -> int:
         return round((self.clock() - started) * 1000)
