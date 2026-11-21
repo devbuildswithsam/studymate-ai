@@ -28,6 +28,8 @@ create study tasks and notes for you through **MCP tools**.
   with an explanation and its page; take a quiz, see your score, try again (best scores kept).
 - **Flashcards:** decks written from a document (10 cards) or from any chat answer ("Make
   flashcards" under it, up to 5); flip each card and mark whether you knew it.
+- **Progress:** quiz average and a chart of recent scores, cards known, tasks done this
+  week / open / overdue, and documents studied.
 - **Notes** (search, tags, "Save as note" on any answer) and a **Tasks** board
   (To do / Doing / Done).
 - An **evaluation harness** that scores answers, citations and retrieval on 30 fixed questions

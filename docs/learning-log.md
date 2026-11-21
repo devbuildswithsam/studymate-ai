@@ -1081,3 +1081,21 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-65 — Progress dashboard
+**Date:** 21 Nov 2026
+
+**What I did**
+- A read-only `GET /api/progress?today=` that adds up my quizzes, flashcards, tasks and documents, and a Progress page with four panels and a small bar chart of recent quiz scores (with a table view).
+- Tests first: 6 API tests next to another user's data that must never count, a two-user isolation test (both versions), and 5 frontend tests; 9 mutants (8 caught, 1 accepted).
+
+**What I learned**
+- **Dates belong to the user:** the server runs in UTC, so "today" comes from the browser; otherwise a task due today would turn "overdue" at 5:30 in the morning in India.
+- **Pick the definition before the code:** "average score" can mean all answers pooled or each attempt equal; the test pins down which one (each attempt equal).
+- **A dashboard is a leak magnifier:** one missing `user_id` filter in a "count everything" query shows someone else's activity, so the isolation suite got a dashboard test.
+- **Symmetric test data hides bugs:** reading the reviews backwards still gave the right count until the data was made lopsided (mutation testing found it).
+
+**What confused me**
+- …

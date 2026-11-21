@@ -19,6 +19,7 @@ from app.api import (
     health,
     models,
     notes,
+    progress,
     quizzes,
     tasks,
     tokens,
@@ -77,5 +78,6 @@ app.include_router(documents.router)  # SMA-44
 app.include_router(tokens.router)  # SMA-61
 app.include_router(quizzes.router)  # SMA-63
 app.include_router(decks.router)  # SMA-64
+app.include_router(progress.router)  # SMA-65
 # MCP (guide 7.2): StudyMate's tools for AI clients. Local mode: this computer only.
 app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))

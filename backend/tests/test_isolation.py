@@ -330,6 +330,27 @@ def test_b_s_lists_and_search_do_not_show_a_s_items(api, two_users, alices_data)
     assert client.get("/api/decks").json() == []  # SMA-64
 
 
+def test_b_s_progress_counts_nothing_of_a_s(api, two_users, alices_data):
+    """SMA-65: the dashboard adds up "all my data", so a missing filter would show here."""
+    alice, bob = two_users
+    today = {"today": "2026-11-21"}  # Alice's task was due on the 20th: overdue for her
+
+    bobs = api(bob).get("/api/progress", params=today).json()
+    alices = api(alice).get("/api/progress", params=today).json()
+
+    assert bobs == {
+        "quizzes": {"attempts": 0, "average_percent": None, "history": []},
+        "flashcards": {"decks": 0, "cards_reviewed": 0, "cards_known": 0, "reviews": 0},
+        "tasks": {"done_last_7_days": 0, "open": 0, "overdue": 0},
+        "documents": {"ready": 0, "studied": 0},
+    }
+    # ...while Alice's own numbers really are there (so Bob's zeros mean something).
+    assert alices["quizzes"]["attempts"] == 1
+    assert alices["flashcards"]["cards_known"] == 1
+    assert alices["tasks"] == {"done_last_7_days": 0, "open": 1, "overdue": 1}
+    assert alices["documents"] == {"ready": 1, "studied": 1}
+
+
 def test_b_cannot_save_a_note_from_a_s_message(api, two_users, alices_data, db_session):
     _, bob = two_users
     before = fingerprint(db_session)

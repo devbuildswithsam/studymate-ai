@@ -119,6 +119,13 @@ With the API running (see the README):
   my latest mark: `knew`, `didnt` or `null`), `POST /api/decks/{id}/reviews`
   `{"card": n, "knew": bool}` (every mark is kept for Progress; the **latest** counts),
   `DELETE /api/decks/{id}`. A deck keeps its own copy of the cards if its source is deleted.
+- **Progress (SMA-65, `app/api/progress.py`, `app/repositories/progress.py`):**
+  `GET /api/progress?today=YYYY-MM-DD` (required; the **browser's** date, so "overdue"
+  follows the student's calendar, not UTC). Read-only, my own data only: quizzes (attempts,
+  average % with every attempt counting equally, the latest 20 for the chart), flashcards
+  (decks, cards reviewed, cards known by their latest mark, all reviews), tasks (done in the
+  last 7 days, open, overdue = not done and due before `today`) and documents (ready, and
+  studied = used in a study chat, a quiz or a deck).
 - **Shared by quizzes and flashcards:** `app/services/structured.py` asks for JSON (only
   models that promise it), checks the reply, repairs once, and labels the source's pages.
 - `POST /api/documents/{id}/retry` — a document whose **embedding** failed (`can_retry: true`)

@@ -12,6 +12,7 @@ import { DocumentsPage } from '@/pages/DocumentsPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotesPage } from '@/pages/NotesPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { ProgressPage } from '@/pages/ProgressPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StudyPage } from '@/pages/StudyPage'
@@ -65,6 +66,7 @@ const PAGES: Record<string, () => React.JSX.Element> = {
   '/tasks': TasksPage,
   '/quizzes': QuizzesPage, // SMA-63
   '/flashcards': FlashcardsPage, // SMA-64
+  '/progress': ProgressPage, // SMA-65
 }
 
 export function AppRoutes() {
