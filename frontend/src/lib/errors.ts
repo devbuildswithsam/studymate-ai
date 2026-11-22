@@ -5,6 +5,16 @@ import { ApiError } from '@/api/client'
 const UNREACHABLE = "Can't reach the server. Is the backend running?"
 
 export function friendlyError(error: unknown): string {
+  const message = sentence(error)
+  // SMA-68: a server failure names its request, so it can be found in the logs. Our own
+  // mistakes (4xx: a wrong field, a missing page) don't need one.
+  if (error instanceof ApiError && error.status >= 500 && error.requestId) {
+    return `${message} (Reference: ${error.requestId.slice(0, 8)})`
+  }
+  return message
+}
+
+function sentence(error: unknown): string {
   if (error instanceof StreamError && error.messageId) {
     // SMA-62: an answer cut off halfway was saved; its own message says what happened.
     return error.message

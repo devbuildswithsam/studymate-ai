@@ -19,7 +19,13 @@ def test_unknown_route_uses_the_error_shape(client):
     response = client.get("/api/does-not-exist")
 
     assert response.status_code == 404
-    assert response.json() == {"error": {"code": "not_found", "message": "Not Found"}}
+    assert response.json() == {
+        "error": {
+            "code": "not_found",
+            "message": "Not Found",
+            "request_id": response.headers["x-request-id"],  # SMA-68
+        }
+    }
 
 
 def test_cors_allows_the_frontend_origin(client):

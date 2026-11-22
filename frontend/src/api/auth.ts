@@ -6,8 +6,8 @@ import { useNavigate } from 'react-router'
 
 import { ApiError, apiGet, apiPost } from '@/api/client'
 
-/** Same fields as the backend's UserOut. */
-export type User = { id: string; email: string; name: string | null }
+/** Same fields as the backend's MeOut. is_admin (SMA-68): shows the admin usage link. */
+export type User = { id: string; email: string; name: string | null; is_admin?: boolean }
 
 export const ME_KEY = ['me'] as const
 

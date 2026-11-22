@@ -21,6 +21,7 @@ import { FlashcardsPage } from '@/pages/FlashcardsPage'
 import { QuizPage } from '@/pages/QuizPage'
 import { QuizzesPage } from '@/pages/QuizzesPage'
 import { TasksPage } from '@/pages/TasksPage'
+import { UsagePage } from '@/pages/UsagePage'
 
 /**
  * The chat page: "/" is a new chat, "/c/:conversationId" a saved one (SMA-31).
@@ -93,6 +94,7 @@ export function AppRoutes() {
           <Route path="/documents/:documentId" element={<DocumentPage />} />
           <Route path="/notes/:noteId" element={<NotesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin/usage" element={<UsagePage />} /> {/* SMA-68 */}
           <Route path="/quizzes/:quizId" element={<QuizPage />} />
           <Route path="/flashcards/:deckId" element={<DeckPage />} />
         </Route>

@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Signs the session tokens. Anyone who knows it can log in as anyone: keep it in .env.
     jwt_secret: SecretStr | None = None
     frontend_origin: str = "http://localhost:5173"
+    # SMA-68: who may see the admin usage page, e.g. "you@example.com, other@example.com".
+    # Empty = nobody (in AUTH_MODE=local, the local user is the admin).
+    admin_emails: str = ""
     # SQLite file next to where you start the app (run uvicorn/alembic from backend/). SMA-27.
     database_url: str = "sqlite:///./app.db"
 

@@ -69,8 +69,14 @@ export class StreamError extends ApiError {
   readonly messageId: string | null
   readonly conversationId: string
 
-  constructor(code: string, message: string, messageId: string | null, conversationId: string) {
-    super(503, code, message)
+  constructor(
+    code: string,
+    message: string,
+    messageId: string | null,
+    conversationId: string,
+    requestId: string | null = null,
+  ) {
+    super(503, code, message, requestId)
     this.name = 'StreamError'
     this.messageId = messageId
     this.conversationId = conversationId
@@ -115,8 +121,8 @@ export async function streamMessage(
       else if (event === 'tool') handlers.onTool(payload as ToolCallOut)
       else if (event === 'done') return payload as ChatReply
       else if (event === 'error') {
-        const { code, message } = payload.error
-        throw new StreamError(code, message, payload.message_id ?? null, conversationId)
+        const { code, message, request_id: requestId } = payload.error
+        throw new StreamError(code, message, payload.message_id ?? null, conversationId, requestId)
       }
     }
   }

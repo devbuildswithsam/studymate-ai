@@ -24,7 +24,10 @@ def make_engine(database_url: str) -> Engine:
         # the connection; SQLite refuses that by default. Each session is still used
         # by one request at a time, so this is safe.
         connect_args["check_same_thread"] = False
-    engine = create_engine(database_url, connect_args=connect_args)
+    # hide_parameters (SMA-68): a database error message otherwise lists the statement's
+    # values ("[parameters: ...]"), and tracebacks go to the logs: a password hash or a
+    # document's text must never end up there.
+    engine = create_engine(database_url, connect_args=connect_args, hide_parameters=True)
 
     if engine.dialect.name == "sqlite":
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)

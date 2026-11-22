@@ -12,6 +12,7 @@ from starlette.routing import Route
 
 from app.api import (
     actions,
+    admin,
     auth,
     conversations,
     decks,
@@ -28,6 +29,8 @@ from app.config import APP_VERSION, get_settings
 from app.csrf import CSRF_HEADER, CsrfMiddleware
 from app.db.migrations import check_database_is_current
 from app.errors import register_error_handlers
+from app.logs import HEADER as REQUEST_ID_HEADER
+from app.logs import RequestIdMiddleware, configure_logging
 from app.mcp_server.http import McpEndpoint, run_mcp
 from app.services.llm.registry import get_registry
 
@@ -44,6 +47,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # command that fixes it, instead of failing later on some page. The settings come the
     # same way routes get them, so tests check their own temporary databases.
     current_settings = app.dependency_overrides.get(get_settings, get_settings)()
+    # SMA-68: JSON log lines from here on. Not in tests: they capture logs their own way.
+    if current_settings.env != "test":
+        configure_logging()
     check_database_is_current(current_settings.database_url)
     async with run_mcp(mcp_endpoint):
         yield
@@ -63,7 +69,12 @@ app.add_middleware(
     allow_origins=[settings.frontend_origin],
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", CSRF_HEADER],
+    expose_headers=[REQUEST_ID_HEADER],  # SMA-68: the page may read it, to show in errors
 )
+
+# SMA-68: added LAST, so it is the outermost layer: every response gets a request id,
+# even a 403 from the CSRF check, and the access log line times the whole request.
+app.add_middleware(RequestIdMiddleware)
 
 register_error_handlers(app)
 
@@ -79,5 +90,6 @@ app.include_router(tokens.router)  # SMA-61
 app.include_router(quizzes.router)  # SMA-63
 app.include_router(decks.router)  # SMA-64
 app.include_router(progress.router)  # SMA-65
+app.include_router(admin.router)  # SMA-68
 # MCP (guide 7.2): StudyMate's tools for AI clients. Local mode: this computer only.
 app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))

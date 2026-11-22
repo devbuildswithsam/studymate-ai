@@ -32,7 +32,7 @@ from app.api.actions import ActionOut
 from app.api.deps import get_current_user_id
 from app.config import Settings, get_settings
 from app.db.session import _session_factory, get_db
-from app.errors import CODES_BY_STATUS
+from app.errors import CODES_BY_STATUS, error_body
 from app.mcp_server.context import ToolContext
 from app.models import Conversation
 from app.repositories import conversations as repo
@@ -369,7 +369,7 @@ def stream_reply(http_request: Request, conversation_id: str, turn: Turn) -> Str
 def error_event(status: int, message: str, message_id: str | None = None) -> dict:
     """An error in the API's usual shape, plus the saved partial answer's id (if any)."""
     code = CODES_BY_STATUS.get(status, "error")
-    return {"error": {"code": code, "message": message}, "message_id": message_id}
+    return {"error": error_body(code, message), "message_id": message_id}
 
 
 def finished_text(text: str, stopped: bool) -> str:

@@ -39,6 +39,21 @@ describe('friendlyError', () => {
     expect(friendlyError(new TypeError('Failed to fetch'))).toBe(UNREACHABLE)
   })
 
+  it('SMA-68: a server failure names its request, so it can be found in the logs', () => {
+    const crash = new ApiError(
+      500,
+      'internal_error',
+      'Something went wrong on our side.',
+      'a1b2c3d4e5f6',
+    )
+    expect(friendlyError(crash)).toBe('Something went wrong on our side. (Reference: a1b2c3d4)')
+    const busy = new ApiError(503, 'service_unavailable', 'technical', 'ffee0011aabb')
+    expect(friendlyError(busy)).toBe(`${BUSY} (Reference: ffee0011)`)
+    // A mistake of the user's (4xx) needs no reference.
+    const invalid = new ApiError(422, 'validation_error', 'too long', 'a1b2c3d4e5f6')
+    expect(friendlyError(invalid)).toBe('too long')
+  })
+
   it("other API errors -> the backend's own message", () => {
     expect(friendlyError(new ApiError(422, 'validation_error', 'body.message: too long'))).toBe(
       'body.message: too long',

@@ -293,7 +293,15 @@ def test_a_s_item_looks_exactly_like_one_that_never_existed(
     alices = client.request(method, fill(path, alices_data), json=body)
     missing = client.request(method, fill(path, unknown), json=body)
 
-    assert (alices.status_code, alices.json()) == (missing.status_code, missing.json())
+    assert (alices.status_code, same_part(alices)) == (missing.status_code, same_part(missing))
+
+
+def same_part(response) -> dict:
+    """The body without its request id (SMA-68), which is new on every request anyway and
+    says nothing about whose item it was."""
+    body = response.json()
+    body["error"].pop("request_id")
+    return body
 
 
 def test_every_route_with_an_id_is_covered():

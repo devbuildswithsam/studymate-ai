@@ -4,6 +4,9 @@
 // the server keeps only its hash, so nobody (not even StudyMate) can show it again.
 import { useState, type FormEvent } from 'react'
 
+import { Link } from 'react-router'
+
+import { useMe } from '@/api/auth'
 import { useHealth } from '@/api/health'
 import {
   EXPIRY_CHOICES,
@@ -22,10 +25,18 @@ const day = (iso: string) => new Date(iso).toLocaleDateString()
 
 export function SettingsPage() {
   const { data: health } = useHealth()
+  const { data: me } = useMe()
 
   return (
     <section className="max-w-2xl">
       <h1 className="text-2xl font-semibold">Settings</h1>
+      {me?.is_admin && (
+        <p className="mt-2 text-sm">
+          <Link to="/admin/usage" className="underline">
+            AI usage (admin)
+          </Link>
+        </p>
+      )}
       <h2 className="mt-6 text-lg font-semibold">Access tokens for MCP clients</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         A token lets a program such as MCP Inspector or Claude Desktop use your StudyMate tools

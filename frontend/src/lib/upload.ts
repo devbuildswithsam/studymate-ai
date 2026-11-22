@@ -129,7 +129,8 @@ export function uploadDocument(
 function errorFrom(status: number, text: string): ApiError {
   try {
     const body = JSON.parse(text)
-    if (body?.error?.message) return new ApiError(status, body.error.code, body.error.message)
+    const error = body?.error
+    if (error?.message) return new ApiError(status, error.code, error.message, error.request_id)
   } catch {
     // Not JSON (e.g. the dev proxy's empty 502): use a generic message.
   }

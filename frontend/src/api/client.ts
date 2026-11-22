@@ -5,12 +5,14 @@
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
+  readonly requestId: string | null // SMA-68: finds this request in the server's logs
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, requestId: string | null = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.requestId = requestId
   }
 }
 
@@ -86,7 +88,8 @@ export async function toApiError(response: Response): Promise<ApiError> {
   try {
     const body = await response.json()
     if (body?.error?.message) {
-      return new ApiError(response.status, body.error.code ?? 'error', body.error.message)
+      const { code, message, request_id: requestId } = body.error
+      return new ApiError(response.status, code ?? 'error', message, requestId ?? null)
     }
   } catch {
     // Not JSON (e.g. a proxy error page): fall through to a generic message.

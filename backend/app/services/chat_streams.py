@@ -15,6 +15,7 @@ The switches live in this process's memory: fine for one server process (v1.1). 
 processes would need a shared store (e.g. Redis), noted for deployment (Stage 6).
 """
 
+import contextvars
 import json
 import queue
 import threading
@@ -81,7 +82,10 @@ async def event_stream(
         finally:
             events.put(None)  # the end, even if `work` crashed
 
-    threading.Thread(target=worker, daemon=True).start()
+    # copy_context (SMA-68): the worker's log lines carry this request's id. A plain
+    # Thread starts with an EMPTY context; anyio/FastAPI threads copy it for us.
+    context = contextvars.copy_context()
+    threading.Thread(target=context.run, args=(worker,), daemon=True).start()
     try:
         while True:
             try:

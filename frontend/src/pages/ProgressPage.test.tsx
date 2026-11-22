@@ -74,7 +74,10 @@ describe('Progress page', () => {
   })
 
   it('shows a friendly error when the numbers cannot be loaded', async () => {
-    mockApi({ '/api/health': HEALTH, [progressUrl()]: { status: 500, body: { error: { code: 'x', message: 'boom' } } } })
+    mockApi({
+      '/api/health': HEALTH,
+      [progressUrl()]: { status: 500, body: { error: { code: 'x', message: 'boom' } } },
+    })
     renderApp('/progress')
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()

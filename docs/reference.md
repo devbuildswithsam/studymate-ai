@@ -49,6 +49,23 @@ With the API running (see the README):
   the call runs in a helper thread; past 90 s it is a **timeout** (`llm_calls.error_type`
   `timeout`) and the next model is tried, or a streamed answer is cut off with what arrived.
   The abandoned call can't reach the student any more (its stream goes quiet).
+- **Request ids and JSON logs (SMA-68, `app/logs.py`):** every response has an
+  `X-Request-ID` header (a new 32-character id, or a harmless one sent by a proxy: 8–64
+  letters, digits, `.`, `_`, `-`), and every error body has it too:
+  `{"error": {"code", "message", "request_id"}}`, also in a stream's `error` event. The
+  frontend adds "(Reference: first 8 characters)" to 5xx messages. Logs are one JSON object
+  per line on stdout: `time` (UTC), `level`, `logger`, `message`, `request_id`, and on the
+  access line `method`, `path` (never the query string), `status`, `duration_ms`. Threads
+  started for a request (AI calls, streamed answers) copy its context, so their lines carry
+  its id. Never logged: bodies, query strings, cookies, headers; anything that looks like a
+  key, Bearer/JWT/`smat_` token or `password=` is masked; SQLAlchemy runs with
+  `hide_parameters=True`, so a database error can't print a row's values.
+- **Admin usage (SMA-68, `app/api/admin.py`):** `GET /api/admin/usage?days=30` (1–365):
+  `rows` of `{day (UTC), provider, model, calls, failures, tokens_in, tokens_out}` from
+  `llm_calls`, newest day first, plus `totals`; every user together, no user named. Only for
+  admins (`ADMIN_EMAILS`, compared without case; in local mode the local user), else **403**.
+  `/api/auth/me`, register and login return `is_admin`; the page is `/admin/usage`, linked
+  from Settings for admins.
 - **In the browser (SMA-59):** `/login` and `/register` are open; every other page sits
   behind `RequireAuth` (`frontend/src/components/auth/`), which asks `GET /api/auth/me`.
   "Nobody" → Login, then back to the page you wanted. A 401 from **any** request makes the

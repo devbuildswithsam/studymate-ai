@@ -263,11 +263,10 @@ def test_wrong_password_and_unknown_email_get_the_same_answer(jwt_api):
     )
 
     assert wrong.status_code == unknown.status_code == 401
-    assert (
-        wrong.json()
-        == unknown.json()
-        == {"error": {"code": "unauthorized", "message": LOGIN_FAILED}}
-    )
+    # The same answer word for word; only the request id differs (new on every request).
+    same = {"code": "unauthorized", "message": LOGIN_FAILED}
+    assert {**wrong.json()["error"], "request_id": None} == {**same, "request_id": None}
+    assert {**unknown.json()["error"], "request_id": None} == {**same, "request_id": None}
     assert "set-cookie" not in wrong.headers
 
 

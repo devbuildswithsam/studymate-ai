@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy.orm import Session
 
+from app.api.admin import is_admin
 from app.api.deps import get_current_user
 from app.config import Settings, get_settings
 from app.csrf import CSRF_COOKIE, new_csrf_token
@@ -71,6 +72,15 @@ class UserOut(BaseModel):
     name: str | None
 
 
+class MeOut(UserOut):
+    is_admin: bool  # SMA-68: the page shows the admin usage link only to admins
+
+
+def me_out(user: User, settings: Settings) -> MeOut:
+    """Who I am, as register, login and "who am I?" all answer it."""
+    return MeOut(id=user.id, email=user.email, name=user.name, is_admin=is_admin(user, settings))
+
+
 def require_accounts(settings: Settings) -> None:
     if settings.auth_mode != "jwt":
         raise HTTPException(
@@ -107,17 +117,17 @@ def set_csrf_cookie(response: Response) -> None:
     )
 
 
-@router.post("/register", response_model=UserOut, status_code=201)
-def register(body: RegisterIn, response: Response, settings: AppSettings, db: Db) -> User:
+@router.post("/register", response_model=MeOut, status_code=201)
+def register(body: RegisterIn, response: Response, settings: AppSettings, db: Db) -> MeOut:
     require_accounts(settings)
     if repo.find_user_by_email(db, body.email):
         raise HTTPException(409, "An account with this email already exists. Log in instead.")
     user = repo.create_user(db, body.email, auth.hash_password(body.password), body.name)
     start_session(response, user, settings)
-    return user
+    return me_out(user, settings)
 
 
-@router.post("/login", response_model=UserOut)
+@router.post("/login", response_model=MeOut)
 def login(
     body: LoginIn,
     request: Request,
@@ -125,7 +135,7 @@ def login(
     settings: AppSettings,
     db: Db,
     limiter: Limiter,
-) -> User:
+) -> MeOut:
     require_accounts(settings)
     address = request.client.host if request.client else "unknown"
     if not limiter.allowed(body.email, address):
@@ -142,7 +152,7 @@ def login(
 
     limiter.succeeded(body.email, address)
     start_session(response, user, settings)
-    return user
+    return me_out(user, settings)
 
 
 @router.post("/logout", status_code=204)
@@ -155,15 +165,15 @@ def logout(response: Response) -> None:
     response.delete_cookie(CSRF_COOKIE, path="/", secure=True, samesite="lax")
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me", response_model=MeOut)
 def me(
     user: Annotated[User, Depends(get_current_user)],
     request: Request,
     response: Response,
     settings: AppSettings,
-) -> User:
+) -> MeOut:
     # The frontend asks "who am I?" when it starts (SMA-59): a good moment to give back a
     # CSRF cookie that went missing, so writes work again without a new login.
     if settings.auth_mode == "jwt" and not request.cookies.get(CSRF_COOKIE):
         set_csrf_cookie(response)
-    return user
+    return me_out(user, settings)

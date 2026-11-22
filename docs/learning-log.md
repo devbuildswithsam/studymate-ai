@@ -1141,3 +1141,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-68 — JSON logs with a request id, and an admin usage view
+**Date:** 21 Nov 2026
+
+**What I did**
+- Every request gets an id: in the `X-Request-ID` header, in every error body (and the UI's "Reference: ..." on server errors), and on every log line, including lines written from helper threads.
+- Logs are one JSON object per line; bodies, query strings and cookies are never logged, key- and token-like text is masked, and SQLAlchemy hides statement values.
+- An admin-only AI usage page (Settings → AI usage): calls, failures and tokens per day and model, totals only. Admins = `ADMIN_EMAILS`; the local user in local mode.
+- Tests first: 18 log tests (including a whole login/token/upload session checked for secrets), 9 admin tests, 4 frontend tests; 17 mutants (16 caught, 1 equivalent); a live run under real uvicorn.
+
+**What I learned**
+- **Context variables:** a request id stored in a `ContextVar` follows the request into threads only if the thread is started with a copy of the context; a plain `Thread` starts empty.
+- **Middleware order:** the request-id layer must be the outermost, or a CSRF 403 would have no id; and a crash is answered by Starlette outside every middleware, so the error handler adds the header itself.
+- **A live run finds what tests can't:** under real uvicorn every line appeared twice, because the MCP library calls `logging.basicConfig()`. The app now owns the root logger when it starts.
+- **Error messages can leak data:** SQLAlchemy puts the row's values in its errors, and tracebacks go to the logs.
+- **Admin pages should show totals, not people.**
+
+**What confused me**
+- …

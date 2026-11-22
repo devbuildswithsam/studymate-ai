@@ -4,7 +4,7 @@
 // can't send a matching header.
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, csrfToken } from '@/api/client'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, csrfToken, toApiError } from '@/api/client'
 import { mockFetch } from '@/test/render'
 
 function setCookie(value: string) {
@@ -74,5 +74,18 @@ describe('the CSRF header', () => {
     await apiPost('/api/notes', { title: 'x' })
 
     expect('X-CSRF-Token' in headersOf(fake)).toBe(false)
+  })
+})
+
+describe('toApiError (SMA-68)', () => {
+  it('keeps the request id from the error body', async () => {
+    const response = Response.json(
+      { error: { code: 'internal_error', message: 'Oops', request_id: 'abc123def456' } },
+      { status: 500 },
+    )
+
+    const error = await toApiError(response)
+
+    expect([error.status, error.message, error.requestId]).toEqual([500, 'Oops', 'abc123def456'])
   })
 })

@@ -114,6 +114,7 @@ python -m scripts.seed
 | `AUTH_MODE` | `local` | `local`: single user, no login, requests from this computer only (refused when `ENV=production`). `jwt`: real accounts with a login cookie (v1.1, [ADR-0009](docs/adr/0009-self-built-auth.md); the login pages arrive in SMA-59) |
 | `JWT_SECRET` | empty | Signs login sessions; needed for `AUTH_MODE=jwt`, at least 32 characters. Make one: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | The only origin allowed by CORS |
+| `ADMIN_EMAILS` | empty | Comma-separated emails that may open **Settings → AI usage** (calls, failures and tokens per day and model). Empty = nobody; in `AUTH_MODE=local` the local user is the admin |
 | `DATABASE_URL` | `sqlite:///./app.db` | `./` is the folder you start from, so run the API and `alembic` from `backend\` |
 
 ### 2. Frontend (one time)
