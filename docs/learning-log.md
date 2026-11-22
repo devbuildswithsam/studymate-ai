@@ -1193,3 +1193,24 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 - **Observability:** a request id on every response, error and log line; JSON logs without secrets; an admin usage page with totals only.
 - **Live runs find what tests can't:** GPT-OSS's 【1】 citations (Stage 4), a doubled log under real uvicorn (SMA-68).
 - **Open for Stage 6:** run the tests and the coverage check automatically (CI) on every push; several server processes would need a shared store for rate limits, the cache and Stop (Redis).
+
+---
+
+## SMA-70 — CI with GitHub Actions
+**Date:** 22 Nov 2026
+
+**What I did**
+- Added `.github/workflows/ci.yml`. On every push and pull request to `main`, three jobs run on a clean Linux machine: backend (`pytest --cov`, then migrations on an empty database), frontend (lint, types, formatting, tests, build) and pre-commit.
+- Before writing any YAML, ran the whole suite in a fresh clone with no `.env`: 1025 passed, 99.11%. So CI needs no API keys.
+- First run on `main`: green in about 5 minutes. The backend takes 4½ minutes on GitHub, compared with 11½ on the laptop.
+- Proved CI catches mistakes: a branch with one deliberately wrong assert turned PR #1 red in exactly one step. Closed it without merging.
+- Added a CI badge to the README, and how to read a red run.
+
+**What I learned**
+- **A workflow is triggers → jobs → steps:** the jobs run side by side on separate machines; the steps inside a job run in order and stop at the first failure.
+- **CI must not need secrets:** if a test needs an API key, it's calling a real AI, and that's the bug. The workflow also gets read-only permission.
+- **`npm ci`, not `npm install`:** it installs exactly the versions in the lock file, so CI tests what the laptop runs.
+- **Caches make reruns fast:** pip, npm and pre-commit downloads are reused until the requirement files change.
+
+**What confused me**
+- …
