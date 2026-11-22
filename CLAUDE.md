@@ -26,11 +26,21 @@ build with me one ticket at a time, and explain everything you do.
   extraction/chunking, Gemini embeddings (ADR-0008), user-scoped retrieval, study chat with
   checked citations and "not found", summaries, evaluation harness (`backend/evals/`, first
   results 19 Nov 2026), README for a fresh clone + `docs/reference.md`.
-- Next: **Stage 5 (v1.1), tickets SMA-56..69, starting with SMA-56** (auth decision, ADR-0009).
-  Open side tasks: SMA-55 (demo video + screenshots, due 27 Nov 2026); eval follow-ups listed in
-  `backend/evals/results/2026-11-19-notes.md`.
-- Releases: v1.0 MVP = Stages 0–4, **local and single-user only** (nothing real is deployed before auth);
-  v1.1 = Stages 5–6 (auth, streaming, quizzes, public deploy); v1.2 = Stage 7 polish.
+- Stage 5 is complete (SMA-56..69, all Dev Complete, no tag): self-built auth (ADR-0009:
+  Argon2id, HttpOnly session cookie, CSRF), login pages, two-account isolation, MCP personal
+  access tokens, streaming answers with Stop, quizzes and flashcards (validated JSON), Progress
+  page, DOCX upload, rate limits + answer cache + 90 s AI call limit, JSON logs with request id
+  + admin usage page (`ADMIN_EMAILS`), coverage 99.1% enforced at 70% (`pytest --cov`).
+- SMA-70 is complete: GitHub Actions CI (`.github/workflows/ci.yml`) runs backend tests with
+  coverage, frontend checks and pre-commit on every push/PR to `main`, with no secrets.
+- **Paused (22 Nov 2026): no public deploy is planned.** The goal was learning to build an AI
+  app; the app runs locally. Stage 6 deploy tickets SMA-71..77 (epic SMA-11) stay in To Do;
+  don't start them unless I ask. Optional open items: SMA-55 (demo video + screenshots); eval
+  follow-ups in `backend/evals/results/2026-11-19-notes.md`.
+- When I come back: summarise the state from this file, Jira and `git log`, then ask what I
+  want to do next.
+- Releases: v1.0 MVP = Stages 0–4 (tag `v1.0`). v1.1 was planned as Stages 5–6 with a public
+  deploy; it isn't tagged because the deploy is paused. Stage 7 (polish) not started.
 
 ## When I say "start SMA-XX"
 1. Read the ticket from Jira (description and "Done when"); check its epic and the guide section it links to.
