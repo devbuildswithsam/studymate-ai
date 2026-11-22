@@ -6,7 +6,7 @@ from app.config import APP_VERSION
 def test_health_returns_status_version_env_and_auth_mode(client):
     response = client.get("/api/health")
 
-    assert response.status_code == 200
+    assert response.status_code == 201  # SMA-70 demo: deliberately wrong, CI must go red
     assert response.json() == {
         "status": "ok",
         "version": APP_VERSION,
