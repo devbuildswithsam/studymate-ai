@@ -1,5 +1,7 @@
 # StudyMate AI
 
+[![CI](https://github.com/devbuildswithsam/studymate-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/devbuildswithsam/studymate-ai/actions/workflows/ci.yml)
+
 An AI study assistant that runs on your own computer: chat with an AI, upload your PDFs and
 ask questions answered **only from them, with page citations**, get summaries, and let the AI
 create study tasks and notes for you through **MCP tools**.
@@ -265,6 +267,13 @@ npm run build
 - `tests/test_isolation.py` proves another user's chats, notes, tasks, actions and documents
   answer **404**. `tests/test_red_team.py` plants "ignore previous instructions" in notes and
   tool results and checks nothing is written.
+- **CI (SMA-70):** GitHub Actions runs all of the above on a clean Linux machine for every push
+  and pull request to `main` (`.github/workflows/ci.yml`), in three jobs: backend (tests with
+  coverage, then migrations on an empty database), frontend (lint, types, formatting, tests,
+  build) and pre-commit. It needs **no API keys**: if CI fails asking for one, a test is
+  calling a real AI, and that's the bug. When the badge is red: open the **Actions** tab,
+  click the failed run, then the job with the red ✗, and expand the red step. The last lines
+  show the failing test or check; run that same command locally to reproduce it.
 - To make the hooks run on every commit, run `pre-commit install` once from the repo root.
   If a hook prints **Failed** (files were modified), the commit did **not** happen: `git add`
   and commit again.
