@@ -257,6 +257,11 @@ npm run lint
 npm run build
 ```
 
+- **Coverage (SMA-69):** `pytest --cov` (from `backend\`) also measures how much of `app/` the
+  tests run, lists the lines they miss, and **fails below 70%** (`backend/.coveragerc`). Last
+  run: **99.1%** (4,039 statements). Put `--cov` last when you pick tests
+  (`pytest tests/test_health.py --cov`): `pytest --cov tests/...` reads the path as what to
+  measure and runs everything. One file alone will fail the 70% check; that's expected.
 - `tests/test_isolation.py` proves another user's chats, notes, tasks, actions and documents
   answer **404**. `tests/test_red_team.py` plants "ignore previous instructions" in notes and
   tool results and checks nothing is written.

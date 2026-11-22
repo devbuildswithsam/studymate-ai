@@ -224,3 +224,14 @@ def test_the_list_shows_the_final_status(client):
     uploaded(client, "notes.txt", NOTES)
 
     assert [d["status"] for d in client.get("/api/documents").json()] == ["ready"]
+
+
+def test_a_pdf_with_only_headers_and_page_numbers_ends_failed(client):
+    """SMA-69: enough letters to pass extraction, but cleaning removes the repeated header
+    and the page numbers, so nothing is left to search."""
+    pages = [f"Physics Notes\n{n}" for n in range(1, 4)]
+
+    last = events_of(upload(client, "Headers.pdf", make_pdf(pages)))[-1]
+
+    assert last["stage"] == "failed"
+    assert "No text found" in last["error"]

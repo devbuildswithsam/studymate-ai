@@ -396,3 +396,9 @@ def test_accounts_are_off_in_local_mode(client, path):
 
     assert response.status_code == 400
     assert "AUTH_MODE=local" in response.json()["error"]["message"]
+
+
+def test_a_damaged_password_hash_is_a_failed_login_not_a_crash():
+    """SMA-69: a broken row (edited by hand, an unknown algorithm) must never let anyone in."""
+    assert verify_password("anything", "not-a-real-hash") is False
+    assert verify_password("anything", "$argon2id$v=19$m=1,t=1,p=1$broken") is False

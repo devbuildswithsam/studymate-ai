@@ -1,0 +1,18 @@
+# Test coverage (SMA-69). From backend\ with the venv active:  pytest --cov
+# The run FAILS if less than 70% of the backend core (app/) is run by the tests.
+# Plain `pytest` doesn't measure (faster while you work on one test file).
+
+[run]
+source = app
+# Threads started by the app (AI calls with a time limit, streamed answers) are measured too.
+concurrency = thread
+
+[report]
+fail_under = 70
+show_missing = True
+skip_covered = True
+# Lines that are never meant to run in tests.
+exclude_also =
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+    raise NotImplementedError

@@ -133,3 +133,22 @@ def test_the_list_says_which_documents_can_be_retried(client, db_session, local_
     flags = sorted(d["can_retry"] for d in client.get("/api/documents").json())
 
     assert flags == [False, False, True]
+
+
+def test_a_retry_is_ready_even_if_the_summary_then_fails(client, db_session, local_user):
+    """SMA-69: the summary is a bonus; a working document must not fail because of it."""
+    from app.services.llm.exceptions import ProviderUnavailableError
+    from app.services.llm.fake import FakeProvider
+    from app.services.llm.fallback import FallbackManager, get_fallback_manager
+    from app.services.llm.registry import get_registry
+
+    document = make_document(db_session, local_user, 3, status="failed")
+    down = FakeProvider(error=ProviderUnavailableError("down", "fake"))
+    manager = FallbackManager(get_registry(), lambda model: down)
+    app.dependency_overrides[get_fallback_manager] = lambda: manager
+    use_embedder(FakeEmbeddingProvider(dimensions=768))
+
+    retried = client.post(f"/api/documents/{document.id}/retry").json()
+
+    assert (retried["status"], retried["summary"]) == ("ready", None)
+    assert embedded(db_session, document) == [True] * 3

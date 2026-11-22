@@ -1162,3 +1162,34 @@ A short entry per ticket: what I did, what I learned, and what confused me.
 
 **What confused me**
 - …
+
+---
+
+## SMA-69 — Test coverage above 70%, and the Stage 5 wrap-up
+**Date:** 22 Nov 2026
+
+**What I did**
+- Added pytest-cov. `pytest --cov` measures `app/`, lists missed lines and fails below 70% (`backend/.coveragerc`); plain `pytest` stays fast.
+- First measurement: 98.8% (49 of 4,039 statements not run). Six of the gaps were real behaviour with no test: a PDF of only headers and page numbers, a crash while streaming, a study answer cut off midway, switching models in a study chat, a retry whose summary fails, a damaged password hash. Each got a test, and each test was checked by breaking its line on purpose.
+- Left uncovered on purpose: the dev-scripts helper and a few error branches already covered elsewhere.
+- After the new tests: 99.1%, 1025 tests passing, the isolation suite included.
+- Proved the check bites: measuring one file alone gives 53% and the run fails.
+
+**What I learned**
+- **Coverage says what ran, not what was checked:** a line can run in a test that asserts nothing about it. That's why each new test was paired with a deliberate break.
+- **70% is a floor, not a goal:** chasing 100% leads to tests written for the number; reading the missed lines finds the real gaps.
+- **`--cov` takes an optional value:** `pytest --cov tests/x.py` measures "tests/x.py" and runs everything; put `--cov` last.
+
+**What confused me**
+- …
+
+---
+
+## Stage 5 notes (v1.1, SMA-56 to SMA-69)
+- **Accounts first:** real login (ADR-0009: Argon2id passwords, an HttpOnly session cookie, CSRF protection) had to come before anything public; every later feature checks the user from the session, never from the request.
+- **The two-user isolation suite grew with every ticket:** tokens, quizzes, decks, progress. A new route with an id must be added to it, or a test fails.
+- **AI output is never trusted as is:** quizzes and flashcards are checked JSON with one repair try; pages the model wasn't shown are cleared; citations are checked.
+- **Cost and safety limits:** rate limits per user, a cache for identical study questions, and a 90 s total limit per AI call.
+- **Observability:** a request id on every response, error and log line; JSON logs without secrets; an admin usage page with totals only.
+- **Live runs find what tests can't:** GPT-OSS's 【1】 citations (Stage 4), a doubled log under real uvicorn (SMA-68).
+- **Open for Stage 6:** run the tests and the coverage check automatically (CI) on every push; several server processes would need a shared store for rate limits, the cache and Stop (Redis).

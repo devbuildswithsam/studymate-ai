@@ -256,3 +256,45 @@ def test_a_stopped_study_answer_is_kept_not_turned_into_not_found(client, physic
 
     assert done["stopped"] is True
     assert done["reply"] == "Entropy" + STOPPED_NOTE  # cut before its citation, still kept
+
+
+# --- SMA-69: paths coverage showed were untested --------------------------------------------
+
+
+def test_a_bug_while_streaming_ends_with_an_error_event_that_names_the_request(client):
+    """A crash (not an AI failure) must still end the stream cleanly, with an id to report."""
+    use_fakes({"main": FakeProvider(error=ZeroDivisionError("a bug")), "backup": FakeProvider()})
+
+    response = ask(client, new_chat(client))
+
+    kind, data = events(response)[-1]
+    assert kind == "error"
+    assert data["error"]["code"] == "internal_error"
+    assert "a bug" not in data["error"]["message"]  # internals stay in the logs
+    assert data["error"]["request_id"] == response.headers["x-request-id"]
+
+
+def test_a_study_answer_cut_off_midway_keeps_the_part_that_arrived(client, physics, db_session):
+    flaky = FakeProvider(replies=["Entropy always increases [1]."], fail_after_pieces=2)
+    use_fakes({"main": flaky, "backup": FakeProvider(replies=["never used"])})
+    chat_id = new_chat(client, mode="study", document_ids=[physics["id"]])
+
+    kind, data = events(ask(client, chat_id))[-1]
+
+    assert kind == "error" and "cut off" in data["error"]["message"]
+    saved = saved_answer(db_session)
+    assert saved.content == "Entropy always" + CUT_OFF_NOTE
+    assert saved.mode == "grounded" and data["message_id"] == saved.id
+
+
+def test_switching_models_in_a_study_chat_is_remembered(client, physics):
+    use_fakes({"main": FakeProvider(), "backup": FakeProvider(replies=["Entropy rises [1]."])})
+    chat_id = new_chat(client, mode="study", document_ids=[physics["id"]])
+
+    reply = client.post(
+        f"/api/conversations/{chat_id}/messages",
+        json={"message": "What is entropy?", "model": "backup"},
+    ).json()
+
+    assert reply["model"] == "fake-model"  # the fake answered as the backup model
+    assert client.get(f"/api/conversations/{chat_id}").json()["model"] == "backup"
